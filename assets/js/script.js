@@ -430,6 +430,11 @@ document.addEventListener('DOMContentLoaded', () => {
        Save to Website Root
     -------------------------*/
     saveToRootBtn.addEventListener('click', async () => {
+        // Prevent duplicate clicks
+        if (isSaving) {
+            console.log('Save operation already in progress, ignoring click');
+            return;
+        }
         
         if (!currentOutputContent && !currentSummarizedContent && !currentFullContent) {
             showError('No content to save. Please generate content first.');
