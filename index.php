@@ -512,28 +512,45 @@ add_action('wp_ajax_kmwp_save_to_root', function () {
         $original_size = strlen($original_content);
         $original_hash = md5($original_content);
         
-        // QUICK CHECK: First check if ANY backup was created in the current second
-        // This catches duplicates being created simultaneously
-        $current_second = date('Y-m-d-H-i-s');
-        $current_second_pattern = $file_path . '.backup.' . $current_second . '*';
-        $current_second_backups = glob($current_second_pattern);
-        
-        if (!empty($current_second_backups)) {
-            // Check each backup from current second to see if content matches
-            foreach ($current_second_backups as $recent_backup) {
-                $recent_content = @file_get_contents($recent_backup);
-                if ($recent_content !== false) {
-                    $recent_size = strlen($recent_content);
-                    $recent_hash = md5($recent_content);
-                    
-                    // If content matches, return existing backup immediately
-                    if ($recent_size === $original_size && $recent_hash === $original_hash) {
-                        error_log('KMWP: Duplicate backup prevented - same content found in backup created this second: ' . basename($recent_backup));
-                        return $recent_backup;
+        // COMPREHENSIVE CHECK: Check ALL backups created in the last 10 seconds
+        // This catches duplicates being created in quick succession
+        $all_recent_backups = glob($file_path . '.backup.*');
+        if (!empty($all_recent_backups)) {
+            // Filter out lock files
+            $all_recent_backups = array_filter($all_recent_backups, function($path) {
+                return strpos($path, '.backup.lock') === false;
+            });
+            
+            // Check backups created in the last 10 seconds
+            $current_time = time();
+            foreach ($all_recent_backups as $recent_backup) {
+                if (!file_exists($recent_backup)) {
+                    continue;
+                }
+                
+                $backup_time = filemtime($recent_backup);
+                $time_diff = $current_time - $backup_time;
+                
+                // Only check backups from the last 10 seconds
+                if ($time_diff <= 10) {
+                    $recent_content = @file_get_contents($recent_backup);
+                    if ($recent_content !== false) {
+                        $recent_size = strlen($recent_content);
+                        $recent_hash = md5($recent_content);
+                        
+                        // If content matches, return existing backup immediately
+                        if ($recent_size === $original_size && $recent_hash === $original_hash) {
+                            error_log('KMWP: Duplicate backup prevented - same content found in backup created ' . $time_diff . 's ago: ' . basename($recent_backup));
+                            return $recent_backup;
+                        }
                     }
                 }
             }
         }
+        
+        // Also check current second pattern for quick lookup
+        $current_second = date('Y-m-d-H-i-s');
+        $current_second_pattern = $file_path . '.backup.' . $current_second . '*';
         
         // Use file locking to prevent simultaneous backup creation
         $lock_file = $file_path . '.backup.lock';
@@ -612,15 +629,15 @@ add_action('wp_ajax_kmwp_save_to_root', function () {
                         return filemtime($b) - filemtime($a);
                     });
                     
-                    // Check the 5 most recent backups
-                    $check_count = min(5, count($double_check_backups));
+                    // Check the 10 most recent backups
+                    $check_count = min(10, count($double_check_backups));
                     for ($i = 0; $i < $check_count; $i++) {
                         $recent_backup = $double_check_backups[$i];
                         $backup_time = filemtime($recent_backup);
                         $time_diff = time() - $backup_time;
                         
-                        // Only check backups from the last 5 seconds
-                        if ($time_diff <= 5) {
+                        // Only check backups from the last 10 seconds
+                        if ($time_diff <= 10) {
                             $recent_content = @file_get_contents($recent_backup);
                             if ($recent_content !== false) {
                                 $recent_size = strlen($recent_content);
@@ -729,6 +746,7 @@ add_action('wp_ajax_kmwp_save_to_root', function () {
     $errors = [];
     $backups_created = [];
     $files_backed_up = []; // Track which files have already been backed up in this operation
+    $backup_paths_created = []; // Track actual backup file paths created in this operation
     
     // Handle "Both" option - save both files
     if ($output_type === 'llms_both') {
@@ -745,6 +763,7 @@ add_action('wp_ajax_kmwp_save_to_root', function () {
                 if ($backup) {
                     $backups_created[] = basename($backup);
                     $files_backed_up[] = $file_path_summary; // Mark as backed up
+                    $backup_paths_created[] = $backup; // Track the backup path
                     // Update old history entry with backup filename
                     kmwp_update_history_with_backup($file_path_summary, $backup);
                 }
@@ -773,6 +792,7 @@ add_action('wp_ajax_kmwp_save_to_root', function () {
                 if ($backup) {
                     $backups_created[] = basename($backup);
                     $files_backed_up[] = $file_path_full; // Mark as backed up
+                    $backup_paths_created[] = $backup; // Track the backup path
                     // Update old history entry with backup filename
                     kmwp_update_history_with_backup($file_path_full, $backup);
                 }
@@ -833,6 +853,80 @@ add_action('wp_ajax_kmwp_save_to_root', function () {
             error_log('KMWP: Failed to save history for llms_both. URL: ' . $website_url);
         }
         
+        // FINAL CLEANUP: Remove any duplicate backups that might have been created
+        if (!empty($backup_paths_created)) {
+            foreach ($backup_paths_created as $backup_path) {
+                if (!file_exists($backup_path)) {
+                    continue;
+                }
+                
+                $backup_content = @file_get_contents($backup_path);
+                if ($backup_content === false) {
+                    continue;
+                }
+                
+                $backup_hash = md5($backup_content);
+                $backup_size = strlen($backup_content);
+                $backup_dir = dirname($backup_path);
+                $backup_base = basename($backup_path);
+                $original_file = str_replace('.backup.' . substr($backup_base, strpos($backup_base, '.backup.') + 8), '', $backup_path);
+                
+                // Find all backups for this file
+                $all_backups = glob($original_file . '.backup.*');
+                $all_backups = array_filter($all_backups, function($path) {
+                    return strpos($path, '.backup.lock') === false;
+                });
+                
+                // Check for duplicates
+                $duplicate_backups = [];
+                foreach ($all_backups as $check_backup) {
+                    if ($check_backup === $backup_path || !file_exists($check_backup)) {
+                        continue;
+                    }
+                    
+                    $check_time = filemtime($check_backup);
+                    $time_diff = abs(filemtime($backup_path) - $check_time);
+                    
+                    // Only check backups created within 10 seconds of each other
+                    if ($time_diff <= 10) {
+                        $check_content = @file_get_contents($check_backup);
+                        if ($check_content !== false) {
+                            $check_hash = md5($check_content);
+                            $check_size = strlen($check_content);
+                            
+                            if ($check_hash === $backup_hash && $check_size === $backup_size) {
+                                $duplicate_backups[] = $check_backup;
+                            }
+                        }
+                    }
+                }
+                
+                // If duplicates found, keep the oldest one and delete the rest
+                if (!empty($duplicate_backups)) {
+                    $all_duplicates = array_merge([$backup_path], $duplicate_backups);
+                    $duplicate_times = [];
+                    foreach ($all_duplicates as $dup) {
+                        if (file_exists($dup)) {
+                            $duplicate_times[$dup] = filemtime($dup);
+                        }
+                    }
+                    
+                    if (count($duplicate_times) > 1) {
+                        asort($duplicate_times); // Sort by time (oldest first)
+                        $keep_duplicate = array_key_first($duplicate_times);
+                        
+                        // Delete all duplicates except the oldest
+                        foreach ($duplicate_times as $dup_path => $mtime) {
+                            if ($dup_path !== $keep_duplicate && file_exists($dup_path)) {
+                                error_log('KMWP: Final cleanup - removing duplicate backup: ' . basename($dup_path));
+                                @unlink($dup_path);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
         wp_send_json_success($response_data);
         return;
     }
@@ -885,6 +979,75 @@ add_action('wp_ajax_kmwp_save_to_root', function () {
     if ($backup_created) {
         $response_data['backup_created'] = basename($backup_created);
         $response_data['message'] .= '. Backup created: ' . basename($backup_created);
+        
+        // FINAL CLEANUP: Remove any duplicate backups that might have been created
+        if (file_exists($backup_created)) {
+            $backup_content = @file_get_contents($backup_created);
+            if ($backup_content !== false) {
+                $backup_hash = md5($backup_content);
+                $backup_size = strlen($backup_content);
+                
+                // Find all backups for this file
+                $all_backups = glob($file_path . '.backup.*');
+                $all_backups = array_filter($all_backups, function($path) {
+                    return strpos($path, '.backup.lock') === false;
+                });
+                
+                // Check for duplicates
+                $duplicate_backups = [];
+                foreach ($all_backups as $check_backup) {
+                    if ($check_backup === $backup_created || !file_exists($check_backup)) {
+                        continue;
+                    }
+                    
+                    $check_time = filemtime($check_backup);
+                    $time_diff = abs(filemtime($backup_created) - $check_time);
+                    
+                    // Only check backups created within 10 seconds of each other
+                    if ($time_diff <= 10) {
+                        $check_content = @file_get_contents($check_backup);
+                        if ($check_content !== false) {
+                            $check_hash = md5($check_content);
+                            $check_size = strlen($check_content);
+                            
+                            if ($check_hash === $backup_hash && $check_size === $backup_size) {
+                                $duplicate_backups[] = $check_backup;
+                            }
+                        }
+                    }
+                }
+                
+                // If duplicates found, keep the oldest one and delete the rest
+                if (!empty($duplicate_backups)) {
+                    $all_duplicates = array_merge([$backup_created], $duplicate_backups);
+                    $duplicate_times = [];
+                    foreach ($all_duplicates as $dup) {
+                        if (file_exists($dup)) {
+                            $duplicate_times[$dup] = filemtime($dup);
+                        }
+                    }
+                    
+                    if (count($duplicate_times) > 1) {
+                        asort($duplicate_times); // Sort by time (oldest first)
+                        $keep_duplicate = array_key_first($duplicate_times);
+                        
+                        // Delete all duplicates except the oldest
+                        foreach ($duplicate_times as $dup_path => $mtime) {
+                            if ($dup_path !== $keep_duplicate && file_exists($dup_path)) {
+                                error_log('KMWP: Final cleanup - removing duplicate backup: ' . basename($dup_path));
+                                @unlink($dup_path);
+                            }
+                        }
+                        
+                        // Update backup_created to the one we kept
+                        if ($keep_duplicate !== $backup_created) {
+                            $backup_created = $keep_duplicate;
+                            $response_data['backup_created'] = basename($backup_created);
+                        }
+                    }
+                }
+            }
+        }
     }
     
     // Save to history - use the actual file path (not backup path)
