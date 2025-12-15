@@ -76,12 +76,17 @@ Built-in permission checks, secure file handling, path validation, and WordPress
 ### **Installation Steps**
 
 1. **Clone or Download the Repository**
+   ```bash
    git clone https://github.com/yourusername/llm-text-generator-wordpress.git
-   
-2. **Upload to WordPress**ash
+   ```
+
+2. **Upload to WordPress**
+   ```bash
    # Copy the plugin folder to your WordPress installation
    cp -r llm-text-generator-wordpress/wp-content/plugins/kenil-mangukiya /path/to/wordpress/wp-content/plugins/
-   3. **Activate the Plugin**
+   ```
+
+3. **Activate the Plugin**
    - Navigate to **WordPress Admin → Plugins**
    - Find **"LLM Text Generator"** in the plugin list
    - Click **"Activate"**
@@ -162,3 +167,25 @@ The plugin creates a custom table `wp_kmwp_file_history` with the following stru
 - `created_at` - Timestamp
 
 ### **File Structure**
+
+```
+kenil-mangukiya/
+├── admin/
+│   └── ui.php              # Admin interface template (HTML/PHP)
+├── assets/
+│   ├── css/
+│   │   └── style.css       # Custom styling and UI components
+│   ├── js/
+│   │   └── script.js       # Frontend JavaScript logic (AJAX, modals, history)
+│   └── images/
+│       └── logo.jpeg       # Plugin logo
+├── index.php               # Main plugin file (hooks, AJAX handlers, database)
+└── README.md              # Project documentation
+```
+
+### **Core Components**
+
+- **`index.php`**: Main plugin entry point containing WordPress hooks, AJAX endpoints, database operations, and backup management logic
+- **`admin/ui.php`**: Admin dashboard interface with form controls, modals, and history display
+- **`assets/js/script.js`**: Frontend JavaScript handling user interactions, AJAX calls, file operations, and UI state management
+- **`assets/css/style.css`**: Custom CSS for modern, responsive admin interface with modal dialogs and animations
