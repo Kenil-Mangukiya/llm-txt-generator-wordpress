@@ -499,6 +499,16 @@ add_action('wp_ajax_kmwp_save_to_root', function () {
         error_log('KMWP: [SAVE_TO_ROOT] website_url: ' . $website_url);
         error_log('KMWP: [SAVE_TO_ROOT] output_type: ' . $output_type);
         error_log('KMWP: [SAVE_TO_ROOT] confirm_overwrite: ' . ($confirm_overwrite ? 'YES' : 'NO'));
+        
+        // CRITICAL: Check file existence BEFORE any file operations
+        // This ensures we only backup files that existed before this request, not files created during this request
+        $file_existed_before = [];
+        $file_existed_before['llm.txt'] = file_exists(ABSPATH . 'llm.txt');
+        $file_existed_before['llm-full.txt'] = file_exists(ABSPATH . 'llm-full.txt');
+        
+        error_log('KMWP: [SAVE_TO_ROOT] File existence BEFORE request:');
+        error_log('KMWP: [SAVE_TO_ROOT] - llm.txt: ' . ($file_existed_before['llm.txt'] ? 'EXISTS' : 'NOT EXISTS'));
+        error_log('KMWP: [SAVE_TO_ROOT] - llm-full.txt: ' . ($file_existed_before['llm-full.txt'] ? 'EXISTS' : 'NOT EXISTS'));
     
     // Initialize request-level backup registry
     if (!isset($GLOBALS['kmwp_backed_up_files'])) {
@@ -665,12 +675,14 @@ add_action('wp_ajax_kmwp_save_to_root', function () {
             
             error_log('KMWP: [SAVE_BOTH] Processing llm.txt');
             error_log('KMWP: [SAVE_BOTH] File path: ' . $file_path_summary);
-            error_log('KMWP: [SAVE_BOTH] File exists: ' . (file_exists($file_path_summary) ? 'YES' : 'NO'));
+            error_log('KMWP: [SAVE_BOTH] File exists NOW: ' . (file_exists($file_path_summary) ? 'YES' : 'NO'));
+            error_log('KMWP: [SAVE_BOTH] File existed BEFORE request: ' . ($file_existed_before['llm.txt'] ? 'YES' : 'NO'));
             error_log('KMWP: [SAVE_BOTH] Confirm overwrite: ' . ($confirm_overwrite ? 'YES' : 'NO'));
             error_log('KMWP: [SAVE_BOTH] Already in files_backed_up: ' . (in_array($file_path_summary, $files_backed_up) ? 'YES' : 'NO'));
             
-            // Create backup if file exists and user confirmed, and we haven't backed it up yet
-            if (file_exists($file_path_summary) && $confirm_overwrite && !in_array($file_path_summary, $files_backed_up)) {
+            // Create backup ONLY if file existed BEFORE this request, user confirmed, and we haven't backed it up yet
+            // This prevents backing up files that were just created in a previous duplicate request
+            if ($file_existed_before['llm.txt'] && $confirm_overwrite && !in_array($file_path_summary, $files_backed_up)) {
                 error_log('KMWP: [SAVE_BOTH] ✓ Conditions met, calling kmwp_create_backup_once for llm.txt');
                 $backup = kmwp_create_backup_once($file_path_summary);
                 error_log('KMWP: [SAVE_BOTH] Backup result for llm.txt: ' . ($backup ? basename($backup) : 'NULL'));
@@ -702,12 +714,14 @@ add_action('wp_ajax_kmwp_save_to_root', function () {
             
             error_log('KMWP: [SAVE_BOTH] Processing llm-full.txt');
             error_log('KMWP: [SAVE_BOTH] File path: ' . $file_path_full);
-            error_log('KMWP: [SAVE_BOTH] File exists: ' . (file_exists($file_path_full) ? 'YES' : 'NO'));
+            error_log('KMWP: [SAVE_BOTH] File exists NOW: ' . (file_exists($file_path_full) ? 'YES' : 'NO'));
+            error_log('KMWP: [SAVE_BOTH] File existed BEFORE request: ' . ($file_existed_before['llm-full.txt'] ? 'YES' : 'NO'));
             error_log('KMWP: [SAVE_BOTH] Confirm overwrite: ' . ($confirm_overwrite ? 'YES' : 'NO'));
             error_log('KMWP: [SAVE_BOTH] Already in files_backed_up: ' . (in_array($file_path_full, $files_backed_up) ? 'YES' : 'NO'));
             
-            // Create backup if file exists and user confirmed, and we haven't backed it up yet
-            if (file_exists($file_path_full) && $confirm_overwrite && !in_array($file_path_full, $files_backed_up)) {
+            // Create backup ONLY if file existed BEFORE this request, user confirmed, and we haven't backed it up yet
+            // This prevents backing up files that were just created in a previous duplicate request
+            if ($file_existed_before['llm-full.txt'] && $confirm_overwrite && !in_array($file_path_full, $files_backed_up)) {
                 error_log('KMWP: [SAVE_BOTH] ✓ Conditions met, calling kmwp_create_backup_once for llm-full.txt');
                 $backup = kmwp_create_backup_once($file_path_full);
                 error_log('KMWP: [SAVE_BOTH] Backup result for llm-full.txt: ' . ($backup ? basename($backup) : 'NULL'));
@@ -799,10 +813,13 @@ add_action('wp_ajax_kmwp_save_to_root', function () {
     $backup_created = null;
     error_log('KMWP: [SAVE_SINGLE] Processing single file save');
     error_log('KMWP: [SAVE_SINGLE] File path: ' . $file_path);
-    error_log('KMWP: [SAVE_SINGLE] File exists: ' . (file_exists($file_path) ? 'YES' : 'NO'));
+    error_log('KMWP: [SAVE_SINGLE] File exists NOW: ' . (file_exists($file_path) ? 'YES' : 'NO'));
+    error_log('KMWP: [SAVE_SINGLE] File existed BEFORE request: ' . ($file_existed_before[$filename] ? 'YES' : 'NO'));
     error_log('KMWP: [SAVE_SINGLE] Confirm overwrite: ' . ($confirm_overwrite ? 'YES' : 'NO'));
     
-    if (file_exists($file_path) && $confirm_overwrite) {
+    // Create backup ONLY if file existed BEFORE this request and user confirmed
+    // This prevents backing up files that were just created in a previous duplicate request
+    if ($file_existed_before[$filename] && $confirm_overwrite) {
         error_log('KMWP: [SAVE_SINGLE] ✓ Conditions met, calling kmwp_create_backup_once');
         $backup_created = kmwp_create_backup_once($file_path);
         error_log('KMWP: [SAVE_SINGLE] Backup result: ' . ($backup_created ? basename($backup_created) : 'NULL'));
@@ -947,7 +964,10 @@ add_action('wp_ajax_kmwp_get_history_item', function () {
 /* delete_history_item */
 add_action('wp_ajax_kmwp_delete_history_item', function () {
     
+    error_log('KMWP: [DELETE] Delete request received');
+    
     if (!current_user_can('manage_options')) {
+        error_log('KMWP: [DELETE] Insufficient permissions');
         wp_send_json_error('Insufficient permissions', 403);
         return;
     }
@@ -955,15 +975,18 @@ add_action('wp_ajax_kmwp_delete_history_item', function () {
     $history_id = intval($_POST['id'] ?? 0);
     
     if (!$history_id) {
+        error_log('KMWP: [DELETE] Invalid history ID: ' . ($_POST['id'] ?? 'not set'));
         wp_send_json_error('Invalid history ID', 400);
         return;
     }
+    
+    error_log('KMWP: [DELETE] Processing delete for history ID: ' . $history_id);
     
     global $wpdb;
     $table_name = $wpdb->prefix . 'kmwp_file_history';
     $user_id = get_current_user_id();
     
-    // Get the history item first to get file paths
+    // Get the history item first to get file paths and output type
     $item = $wpdb->get_row(
         $wpdb->prepare(
             "SELECT * FROM $table_name WHERE id = %d AND user_id = %d",
@@ -974,115 +997,164 @@ add_action('wp_ajax_kmwp_delete_history_item', function () {
     );
     
     if (!$item) {
-        wp_send_json_error('History item not found', 404);
+        error_log('KMWP: [DELETE] History item not found. ID: ' . $history_id . ', User ID: ' . $user_id);
+        // Item might have been deleted by a concurrent request - return success to avoid frontend error
+        error_log('KMWP: [DELETE] Item already deleted (possibly by concurrent request), returning success');
+        wp_send_json_success(['message' => 'History item already deleted', 'files_deleted' => [], 'files_failed' => []]);
         return;
     }
     
-    // Delete files from server if they exist
-    // IMPORTANT: Only delete backup files, not current files (llm.txt, llm-full.txt)
-    // Current files might be referenced by newer history entries
+    error_log('KMWP: [DELETE] History item found. Output type: ' . $item['output_type']);
+    error_log('KMWP: [DELETE] File path from DB: ' . ($item['file_path'] ?? 'empty'));
+    
+    // Determine which files should be deleted based on output_type
+    $files_to_delete = [];
+    $output_type = $item['output_type'];
+    
+    // Define target files based on output type
+    if ($output_type === 'llms_both') {
+        $files_to_delete[] = 'llm.txt';
+        $files_to_delete[] = 'llm-full.txt';
+        error_log('KMWP: [DELETE] Output type is "both" - will delete llm.txt and llm-full.txt');
+    } elseif ($output_type === 'llms_txt') {
+        $files_to_delete[] = 'llm.txt';
+        error_log('KMWP: [DELETE] Output type is "llms_txt" - will delete llm.txt only');
+    } elseif ($output_type === 'llms_full_txt') {
+        $files_to_delete[] = 'llm-full.txt';
+        error_log('KMWP: [DELETE] Output type is "llms_full_txt" - will delete llm-full.txt only');
+    } else {
+        error_log('KMWP: [DELETE] Unknown output type: ' . $output_type);
+    }
+    
     $files_deleted = [];
     $files_failed = [];
+    $real_abspath = realpath(ABSPATH);
+    
+    if ($real_abspath === false) {
+        error_log('KMWP: [DELETE] Failed to resolve ABSPATH: ' . ABSPATH);
+        wp_send_json_error('Failed to resolve WordPress root path', 500);
+        return;
+    }
+    
+    error_log('KMWP: [DELETE] WordPress root: ' . $real_abspath);
+    
+    // Process files from database file_path (backup files)
     if (!empty($item['file_path'])) {
-        // More robust path splitting - handle both ', ' and ','
         $file_paths = preg_split('/,\s*/', $item['file_path'], -1, PREG_SPLIT_NO_EMPTY);
-        
-        error_log('KMWP: Deleting history item ' . $history_id . '. File paths found: ' . count($file_paths));
-        error_log('KMWP: Raw file_path: ' . $item['file_path']);
+        error_log('KMWP: [DELETE] Found ' . count($file_paths) . ' file path(s) in database');
         
         foreach ($file_paths as $file_path) {
             $file_path = trim($file_path);
             
-            // Skip if path is empty or truncated (ends with ...)
             if (empty($file_path) || substr($file_path, -3) === '...') {
-                error_log('KMWP: Skipping truncated or empty file path: ' . $file_path);
+                error_log('KMWP: [DELETE] Skipping truncated or empty path: ' . $file_path);
                 continue;
             }
             
-            // Only delete backup files (files containing '.backup.' in the path)
-            // This prevents deleting current files that might be used by newer entries
+            $filename = basename($file_path);
             $is_backup = strpos($file_path, '.backup.') !== false;
             
-            if ($is_backup) {
-                // Normalize path separators for Windows
-                $normalized_path = str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $file_path);
-                
-                // Check if file exists
-                if (!file_exists($normalized_path)) {
-                    error_log('KMWP: Backup file does not exist: ' . $normalized_path);
-                    $files_failed[] = basename($normalized_path) . ' (not found)';
-                    continue;
+            error_log('KMWP: [DELETE] Processing file from DB: ' . $filename . ' (backup: ' . ($is_backup ? 'yes' : 'no') . ')');
+            
+            // Check if this file matches our target files based on output_type
+            $should_delete = false;
+            foreach ($files_to_delete as $target_file) {
+                // Check if filename contains target file (handles both current and backup files)
+                if (strpos($filename, $target_file) !== false) {
+                    $should_delete = true;
+                    error_log('KMWP: [DELETE] File matches target: ' . $filename . ' matches ' . $target_file);
+                    break;
                 }
-                
-                // Security check: ensure file is within WordPress root
-                $real_file_path = realpath($normalized_path);
-                $real_abspath = realpath(ABSPATH);
-                
-                if ($real_file_path === false || $real_abspath === false) {
-                    error_log('KMWP: Failed to resolve realpath. File: ' . $normalized_path . ', ABSPATH: ' . ABSPATH);
-                    $files_failed[] = basename($normalized_path) . ' (path resolution failed)';
-                    continue;
-                }
-                
-                // Check if file is within WordPress root (case-insensitive for Windows)
-                $is_within_root = (stripos($real_file_path, $real_abspath) === 0);
-                
-                if (!$is_within_root) {
-                    error_log('KMWP: File is outside WordPress root: ' . $real_file_path);
-                    $files_failed[] = basename($normalized_path) . ' (outside root)';
-                    continue;
-                }
-                
-                // Attempt to delete
-                if (@unlink($normalized_path)) {
-                    $files_deleted[] = basename($normalized_path);
-                    error_log('KMWP: Successfully deleted backup file: ' . $normalized_path);
-                } else {
-                    $error = error_get_last();
-                    error_log('KMWP: Failed to delete backup file: ' . $normalized_path . '. Error: ' . ($error ? $error['message'] : 'Unknown'));
-                    $files_failed[] = basename($normalized_path) . ' (delete failed)';
-                }
+            }
+            
+            if (!$should_delete) {
+                error_log('KMWP: [DELETE] Skipping file (does not match output_type): ' . $filename);
+                continue;
+            }
+            
+            // Normalize path
+            $normalized_path = str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $file_path);
+            
+            // Security check: ensure file is within WordPress root
+            $real_file_path = realpath($normalized_path);
+            
+            if ($real_file_path === false) {
+                error_log('KMWP: [DELETE] File does not exist: ' . $normalized_path);
+                $files_failed[] = $filename . ' (not found)';
+                continue;
+            }
+            
+            $is_within_root = (stripos($real_file_path, $real_abspath) === 0);
+            
+            if (!$is_within_root) {
+                error_log('KMWP: [DELETE] File outside WordPress root: ' . $real_file_path);
+                $files_failed[] = $filename . ' (outside root)';
+                continue;
+            }
+            
+            // Attempt to delete
+            if (@unlink($real_file_path)) {
+                $files_deleted[] = $filename;
+                error_log('KMWP: [DELETE] ✓ Successfully deleted: ' . $real_file_path);
             } else {
-                // For non-backup files, check if there are newer history entries that reference them
-                // If yes, don't delete (they're still in use)
-                $filename = basename($file_path);
-                $newer_entry = $wpdb->get_var(
-                    $wpdb->prepare(
-                        "SELECT COUNT(*) FROM $table_name 
-                        WHERE user_id = %d 
-                        AND id != %d 
-                        AND created_at > %s 
-                        AND file_path LIKE %s",
-                        $user_id,
-                        $history_id,
-                        $item['created_at'],
-                        '%' . $wpdb->esc_like($filename) . '%'
-                    )
-                );
-                
-                // Only delete current file if no newer entries reference it
-                if ($newer_entry == 0) {
-                    $normalized_path = str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $file_path);
-                    
-                    if (file_exists($normalized_path)) {
-                        $real_file_path = realpath($normalized_path);
-                        $real_abspath = realpath(ABSPATH);
-                        
-                        if ($real_file_path !== false && $real_abspath !== false) {
-                            $is_within_root = (stripos($real_file_path, $real_abspath) === 0);
-                            
-                            if ($is_within_root && @unlink($normalized_path)) {
-                                $files_deleted[] = basename($normalized_path);
-                                error_log('KMWP: Successfully deleted current file: ' . $normalized_path);
-                            }
-                        }
-                    }
-                }
+                $error = error_get_last();
+                error_log('KMWP: [DELETE] ✗ Failed to delete: ' . $real_file_path . '. Error: ' . ($error ? $error['message'] : 'Unknown'));
+                $files_failed[] = $filename . ' (delete failed)';
             }
         }
     }
     
+    // Also check and delete current files from filesystem if they match output_type
+    // Only delete if no newer history entries reference them
+    error_log('KMWP: [DELETE] Checking current files in filesystem...');
+    foreach ($files_to_delete as $target_file) {
+        $current_file_path = $real_abspath . DIRECTORY_SEPARATOR . $target_file;
+        
+        error_log('KMWP: [DELETE] Checking current file: ' . $current_file_path);
+        
+        if (!file_exists($current_file_path)) {
+            error_log('KMWP: [DELETE] Current file does not exist: ' . $target_file);
+            continue;
+        }
+        
+        // Check if there are newer history entries that reference this file
+        $newer_entry = $wpdb->get_var(
+            $wpdb->prepare(
+                "SELECT COUNT(*) FROM $table_name 
+                WHERE user_id = %d 
+                AND id != %d 
+                AND created_at > %s 
+                AND file_path LIKE %s",
+                $user_id,
+                $history_id,
+                $item['created_at'],
+                '%' . $wpdb->esc_like($target_file) . '%'
+            )
+        );
+        
+        error_log('KMWP: [DELETE] Newer entries referencing ' . $target_file . ': ' . $newer_entry);
+        
+        // Only delete current file if no newer entries reference it
+        if ($newer_entry == 0) {
+            $real_current_path = realpath($current_file_path);
+            
+            if ($real_current_path !== false && stripos($real_current_path, $real_abspath) === 0) {
+                if (@unlink($real_current_path)) {
+                    $files_deleted[] = $target_file;
+                    error_log('KMWP: [DELETE] ✓ Successfully deleted current file: ' . $real_current_path);
+                } else {
+                    $error = error_get_last();
+                    error_log('KMWP: [DELETE] ✗ Failed to delete current file: ' . $real_current_path . '. Error: ' . ($error ? $error['message'] : 'Unknown'));
+                    $files_failed[] = $target_file . ' (delete failed)';
+                }
+            }
+        } else {
+            error_log('KMWP: [DELETE] Skipping current file (referenced by newer entry): ' . $target_file);
+        }
+    }
+    
     // Delete from database
+    error_log('KMWP: [DELETE] Deleting database entry...');
     $deleted = $wpdb->delete(
         $table_name,
         ['id' => $history_id, 'user_id' => $user_id],
@@ -1090,6 +1162,7 @@ add_action('wp_ajax_kmwp_delete_history_item', function () {
     );
     
     if ($deleted) {
+        error_log('KMWP: [DELETE] ✓ Database entry deleted successfully');
         $message = 'History item deleted';
         if (!empty($files_deleted)) {
             $message .= '. Files deleted: ' . implode(', ', $files_deleted);
@@ -1097,8 +1170,10 @@ add_action('wp_ajax_kmwp_delete_history_item', function () {
         if (!empty($files_failed)) {
             $message .= '. Files failed to delete: ' . implode(', ', $files_failed);
         }
+        error_log('KMWP: [DELETE] Final result - Deleted: ' . count($files_deleted) . ', Failed: ' . count($files_failed));
         wp_send_json_success(['message' => $message, 'files_deleted' => $files_deleted, 'files_failed' => $files_failed]);
     } else {
+        error_log('KMWP: [DELETE] ✗ Failed to delete database entry. Error: ' . $wpdb->last_error);
         wp_send_json_error('Failed to delete history item', 500);
     }
 });

@@ -10,6 +10,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const websiteUrlInput = document.getElementById('websiteUrl');
     const generateBtn = document.getElementById('generateBtn');
     const statusMessage = document.getElementById('statusMessage');
+    const statusMessageText = document.getElementById('statusMessageText');
+    const statusMessageClose = document.getElementById('statusMessageClose');
     const outputSection = document.getElementById('outputSection');
     const outputIframe = document.getElementById('outputIframe');
     const copyBtn = document.getElementById('copyBtn');
@@ -38,6 +40,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const deleteModalCloseBtn = document.getElementById('deleteModalCloseBtn');
     
     let isSaving = false; // Prevent duplicate saves
+    let isDeleting = false; // Prevent duplicate deletes
     let currentDeleteId = null; // Store ID for delete confirmation
 
     let selectedOutputType = 'llms_txt';
@@ -50,13 +53,40 @@ document.addEventListener('DOMContentLoaded', () => {
        Helpers
     -------------------------*/
     function showError(msg) {
-        statusMessage.textContent = `Error: ${msg}`;
+        if (statusMessageText) {
+            statusMessageText.textContent = `Error: ${msg}`;
+        }
         statusMessage.className = 'status-message status-error';
+        if (statusMessageClose) {
+            statusMessageClose.style.display = 'inline-block';
+        }
     }
 
     function showSuccess(msg) {
-        statusMessage.textContent = msg;
+        if (statusMessageText) {
+            statusMessageText.textContent = msg;
+        }
         statusMessage.className = 'status-message status-success';
+        if (statusMessageClose) {
+            statusMessageClose.style.display = 'inline-block';
+        }
+    }
+    
+    function clearStatusMessage() {
+        if (statusMessageText) {
+            statusMessageText.textContent = '';
+        }
+        statusMessage.className = 'status-message';
+        if (statusMessageClose) {
+            statusMessageClose.style.display = 'none';
+        }
+    }
+    
+    // Close button for status message
+    if (statusMessageClose) {
+        statusMessageClose.addEventListener('click', () => {
+            clearStatusMessage();
+        });
     }
 
     function showProcessingOverlay() {
@@ -87,12 +117,112 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function isValidUrl(url) {
-        try {
-            const u = new URL(url);
-            return ['http:', 'https:'].includes(u.protocol);
-        } catch {
-            return false;
+        if (!url || typeof url !== 'string') {
+            return { valid: false, error: 'URL is required' };
         }
+        
+        const trimmedUrl = url.trim();
+        
+        if (trimmedUrl.length === 0) {
+            return { valid: false, error: 'URL cannot be empty' };
+        }
+        
+        // Check for minimum length
+        if (trimmedUrl.length < 4) {
+            return { valid: false, error: 'URL is too short' };
+        }
+        
+        // Check for maximum length (reasonable limit)
+        if (trimmedUrl.length > 2048) {
+            return { valid: false, error: 'URL is too long (maximum 2048 characters)' };
+        }
+        
+        // Check for spaces in URL (invalid)
+        if (trimmedUrl.includes(' ')) {
+            return { valid: false, error: 'URL cannot contain spaces' };
+        }
+        
+        // Normalize URL - add protocol if missing
+        let normalizedUrl = trimmedUrl;
+        if (!trimmedUrl.match(/^https?:\/\//i)) {
+            normalizedUrl = 'https://' + trimmedUrl;
+        }
+        
+        try {
+            const urlObj = new URL(normalizedUrl);
+            
+            // Validate protocol
+            if (!['http:', 'https:'].includes(urlObj.protocol)) {
+                return { valid: false, error: 'URL must use http:// or https:// protocol' };
+            }
+            
+            // Validate hostname exists
+            if (!urlObj.hostname || urlObj.hostname.length === 0) {
+                return { valid: false, error: 'URL must contain a valid domain name' };
+            }
+            
+            // Validate hostname format
+            const hostname = urlObj.hostname.toLowerCase();
+            
+            // Check for invalid characters in hostname
+            if (!/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/i.test(hostname)) {
+                return { valid: false, error: 'Invalid domain name format' };
+            }
+            
+            // Check for valid TLD (at least 2 characters after last dot)
+            const parts = hostname.split('.');
+            if (parts.length < 2) {
+                return { valid: false, error: 'URL must contain a valid top-level domain (e.g., .com, .org)' };
+            }
+            
+            const tld = parts[parts.length - 1];
+            if (tld.length < 2 || !/^[a-z]{2,}$/i.test(tld)) {
+                return { valid: false, error: 'Invalid top-level domain' };
+            }
+            
+            // Check for common invalid patterns
+            if (hostname.startsWith('.') || hostname.endsWith('.')) {
+                return { valid: false, error: 'Domain name cannot start or end with a dot' };
+            }
+            
+            if (hostname.includes('..')) {
+                return { valid: false, error: 'Domain name cannot contain consecutive dots' };
+            }
+            
+            // Check for localhost or IP addresses (optional - you can remove this if you want to allow them)
+            // For now, we'll allow localhost and IPs for development
+            const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname.startsWith('192.168.') || hostname.startsWith('10.') || hostname.startsWith('172.');
+            
+            // Validate port if present
+            if (urlObj.port) {
+                const port = parseInt(urlObj.port, 10);
+                if (isNaN(port) || port < 1 || port > 65535) {
+                    return { valid: false, error: 'Invalid port number' };
+                }
+            }
+            
+            // All validations passed
+            return { 
+                valid: true, 
+                normalizedUrl: normalizedUrl,
+                originalUrl: trimmedUrl
+            };
+            
+        } catch (e) {
+            // If URL constructor fails, provide helpful error
+            if (e instanceof TypeError) {
+                return { valid: false, error: 'Invalid URL format. Please include http:// or https://' };
+            }
+            return { valid: false, error: 'Invalid URL format' };
+        }
+    }
+    
+    function validateAndNormalizeUrl(url) {
+        const validation = isValidUrl(url);
+        if (!validation.valid) {
+            return { valid: false, error: validation.error, url: url };
+        }
+        return { valid: true, url: validation.normalizedUrl, originalUrl: validation.originalUrl };
     }
 
     function displayContent(content) {
@@ -125,6 +255,64 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     /* ------------------------
+       URL Input Validation
+    -------------------------*/
+    let urlValidationTimeout = null;
+    
+    function validateUrlInput(showError = false) {
+        const urlInput = websiteUrlInput.value.trim();
+        
+        // Clear previous timeout
+        if (urlValidationTimeout) {
+            clearTimeout(urlValidationTimeout);
+        }
+        
+        // If empty, clear any error styling
+        if (!urlInput) {
+            websiteUrlInput.classList.remove('url-invalid', 'url-valid');
+            clearStatusMessage();
+            return;
+        }
+        
+        // Debounce validation (wait 500ms after user stops typing)
+        urlValidationTimeout = setTimeout(() => {
+            const validation = validateAndNormalizeUrl(urlInput);
+            
+            if (validation.valid) {
+                websiteUrlInput.classList.remove('url-invalid');
+                websiteUrlInput.classList.add('url-valid');
+                // Optionally show success message (but don't spam)
+                // clearStatusMessage();
+            } else {
+                websiteUrlInput.classList.remove('url-valid');
+                websiteUrlInput.classList.add('url-invalid');
+                if (showError) {
+                    showError(validation.error);
+                }
+            }
+        }, 500);
+    }
+    
+    // Real-time validation as user types
+    if (websiteUrlInput) {
+        websiteUrlInput.addEventListener('input', () => {
+            validateUrlInput(false); // Don't show error while typing
+        });
+        
+        // Validate on blur (when user leaves the field)
+        websiteUrlInput.addEventListener('blur', () => {
+            validateUrlInput(true); // Show error if invalid when leaving field
+        });
+        
+        // Validate on paste
+        websiteUrlInput.addEventListener('paste', () => {
+            setTimeout(() => {
+                validateUrlInput(true);
+            }, 100);
+        });
+    }
+
+    /* ------------------------
        Toggle buttons
     -------------------------*/
     toggleButtons.forEach(btn => {
@@ -140,10 +328,28 @@ document.addEventListener('DOMContentLoaded', () => {
     -------------------------*/
     generateBtn.addEventListener('click', async () => {
 
-        const url = websiteUrlInput.value.trim();
+        const urlInput = websiteUrlInput.value.trim();
 
-        if (!url) return showError('Please enter a URL');
-        if (!isValidUrl(url)) return showError('Invalid URL');
+        if (!urlInput) {
+            showError('Please enter a URL');
+            websiteUrlInput.focus();
+            return;
+        }
+        
+        // Validate and normalize URL
+        const urlValidation = validateAndNormalizeUrl(urlInput);
+        if (!urlValidation.valid) {
+            showError(urlValidation.error);
+            websiteUrlInput.focus();
+            return;
+        }
+        
+        const url = urlValidation.url;
+        
+        // Update input field with normalized URL if it was modified
+        if (url !== urlInput) {
+            websiteUrlInput.value = url;
+        }
 
         generateBtn.disabled = true;
         showProcessingOverlay();
@@ -215,7 +421,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else if (selectedOutputType === 'llms_full_txt') {
                     currentFullContent = result.llms_full_text || '';
                     currentOutputContent = currentFullContent;
-                } else {
+            } else {
                     // For both, store separately
                     currentSummarizedContent = result.llms_text || '';
                     currentFullContent = result.llms_full_text || '';
@@ -540,8 +746,9 @@ document.addEventListener('DOMContentLoaded', () => {
     -------------------------*/
     clearBtn.addEventListener('click', () => {
         websiteUrlInput.value = '';
+        websiteUrlInput.classList.remove('url-invalid', 'url-valid');
         outputSection.style.display = 'none';
-        statusMessage.textContent = '';
+        clearStatusMessage();
         currentOutputContent = '';
         currentSummarizedContent = '';
         currentFullContent = '';
@@ -673,6 +880,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="history-actions">
                         <button class="btn-view" data-id="${item.id}">View</button>
                         <button class="btn-download-history" data-id="${item.id}" data-type="${item.output_type}">Download</button>
+                        <button class="btn-delete-history" data-id="${item.id}" data-type="${item.output_type}">Delete</button>
                     </div>
                 </div>
             `;
@@ -698,7 +906,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Event handler for history actions (event delegation)
     function handleHistoryClick(e) {
-        const target = e.target.closest('.btn-view, .btn-download-history');
+        const target = e.target.closest('.btn-view, .btn-download-history, .btn-delete-history');
         if (!target) return;
         
         const id = target.dataset.id;
@@ -706,6 +914,8 @@ document.addEventListener('DOMContentLoaded', () => {
             viewHistoryItem(id);
         } else if (target.classList.contains('btn-download-history')) {
             downloadHistoryItem(id, target.dataset.type);
+        } else if (target.classList.contains('btn-delete-history')) {
+            deleteHistoryItem(id);
         }
     }
 
@@ -1020,8 +1230,18 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     async function proceedWithDelete() {
-        if (!currentDeleteId) return;
+        // Prevent duplicate delete operations
+        if (isDeleting) {
+            console.log('Delete operation already in progress, ignoring duplicate call');
+            return;
+        }
         
+        if (!currentDeleteId) {
+            console.log('No delete ID set, ignoring delete call');
+            return;
+        }
+        
+        isDeleting = true;
         const id = currentDeleteId;
         currentDeleteId = null;
         
@@ -1048,13 +1268,41 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: formData
             });
             
+            // Handle response - check if it's already deleted (404) or other errors
             if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.data?.message || 'Failed to delete history item');
+                const errorData = await response.json().catch(() => ({ data: { message: 'Unknown error' } }));
+                const errorMessage = errorData.data?.message || 'Failed to delete history item';
+                
+                // If 404, the item might have been deleted already (race condition)
+                // Check if it still exists in the history before showing error
+                if (response.status === 404) {
+                    console.log('Delete returned 404, checking if item still exists...');
+                    // Refresh history - if item is gone, it was successfully deleted
+                    await loadHistory(false);
+                    // Check if the item still exists
+                    const itemStillExists = document.querySelector(`.btn-delete-history[data-id="${id}"]`);
+                    if (!itemStillExists) {
+                        // Item is gone, deletion was successful (handled by another request)
+                        // Don't show message for duplicate requests
+                        console.log('Item already deleted by another request, silently completing');
+                        await loadHistory(false);
+                        return;
+                    }
+                }
+                
+                throw new Error(errorMessage);
             }
             
             const result = await response.json();
             let message = result.data.message || 'History item deleted';
+            
+            // Check if this is the "already deleted" message (from duplicate request)
+            // If so, don't show it - the first request already handled it
+            if (message === 'History item already deleted' || message.includes('already deleted')) {
+                console.log('Duplicate delete request detected, silently ignoring');
+                await loadHistory(false);
+                return;
+            }
             
             // Show success if files were deleted, warning if some failed
             if (result.data.files_failed && result.data.files_failed.length > 0) {
@@ -1062,17 +1310,19 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 showSuccess(message);
             }
-            loadHistory(false);
+            await loadHistory(false);
         } catch (err) {
+            console.error('Delete error:', err);
             showError(err.message);
         } finally {
-            // Always reset button - use setTimeout to ensure it happens after any async operations
+            // Always reset button and flag
             setTimeout(() => {
                 if (btn) {
                     btn.disabled = false;
                     btn.textContent = originalText;
                     btn.innerHTML = originalText; // Also reset innerHTML to ensure no loader remains
                 }
+                isDeleting = false;
             }, 0);
         }
     }
@@ -1080,6 +1330,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // Delete confirmation modal handlers
     if (deleteProceedBtn) {
         deleteProceedBtn.addEventListener('click', () => {
+            // Prevent duplicate clicks
+            if (isDeleting) {
+                console.log('Delete already in progress, ignoring click');
+                return;
+            }
             proceedWithDelete();
         });
     }

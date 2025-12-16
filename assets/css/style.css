@@ -103,6 +103,26 @@
     box-shadow: 0 0 0 2px rgba(91, 65, 250, 0.2);
   }
   
+  .input-row input.url-valid {
+    border-color: #16a34a;
+    box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.1);
+  }
+  
+  .input-row input.url-valid:focus {
+    border-color: #15803d;
+    box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.15);
+  }
+  
+  .input-row input.url-invalid {
+    border-color: #ef4444;
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+  }
+  
+  .input-row input.url-invalid:focus {
+    border-color: #dc2626;
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+  }
+  
   .btn {
     padding: 10px 16px;
     border-radius: 6px;
@@ -136,8 +156,13 @@
   .status-message {
     margin-top: 10px;
     padding: 10px;
+    padding-right: 35px;
     border-radius: 6px;
     font-size: 14px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
   }
   
   .status-message.status-success {
@@ -152,8 +177,49 @@
     border: 1px solid #fca5a5;
   }
   
-  .status-message:empty {
+  .status-message:empty,
+  .status-message:not(.status-success):not(.status-error) {
     display: none;
+  }
+  
+  .status-message-close {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: transparent;
+    border: none;
+    color: inherit;
+    font-size: 20px;
+    font-weight: bold;
+    cursor: pointer;
+    padding: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: background-color 0.2s ease;
+    opacity: 0.7;
+  }
+  
+  .status-message-close:hover {
+    opacity: 1;
+    background: rgba(0, 0, 0, 0.1);
+  }
+  
+  .status-message.status-success .status-message-close:hover {
+    background: rgba(6, 95, 70, 0.1);
+  }
+  
+  .status-message.status-error .status-message-close:hover {
+    background: rgba(153, 27, 27, 0.1);
+  }
+  
+  #statusMessageText {
+    flex: 1;
+    padding-right: 10px;
   }
   
   .output-header {

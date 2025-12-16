@@ -31,7 +31,10 @@
                 <button id="clearBtn" class="btn clear">Clear</button>
                 <button id="showHistoryBtn" class="btn history">View History</button>
             </div>
-            <p id="statusMessage" class="status-message"></p>
+            <div id="statusMessage" class="status-message">
+                <span id="statusMessageText"></span>
+                <button type="button" id="statusMessageClose" class="status-message-close" aria-label="Close" style="display: none;">×</button>
+            </div>
         </section>
         <section class="generator-card" id="outputSection" style="display: none;">
             <div class="output">
