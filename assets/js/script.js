@@ -514,10 +514,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             
-            // Disable button and show loading state with spinner
+            // Disable button and change background color
             submitBtn.disabled = true;
-            const originalBtnHTML = submitBtn.innerHTML;
-            submitBtn.innerHTML = '<span class="btn-loader"></span> Sending OTP...';
+            const originalBtnColor = submitBtn.style.background;
+            const originalBtnText = submitBtn.textContent;
+            
+            // Change button background color to indicate processing
+            submitBtn.style.background = '#94a3b8';
+            submitBtn.textContent = 'Sending...';
             
             try {
                 const response = await apiFetch('kmwp_send_otp', {
@@ -555,7 +559,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 // Reset button state immediately
                 submitBtn.disabled = false;
-                submitBtn.innerHTML = originalBtnHTML;
+                submitBtn.style.background = originalBtnColor;
+                submitBtn.textContent = originalBtnText;
                 
                 console.log('OTP sent successfully, proceeding to modal switch...');
                 
@@ -588,7 +593,8 @@ document.addEventListener('DOMContentLoaded', () => {
             } catch (err) {
                 // Reset button state on error
                 submitBtn.disabled = false;
-                submitBtn.innerHTML = originalBtnHTML;
+                submitBtn.style.background = originalBtnColor;
+                submitBtn.textContent = originalBtnText;
                 console.error('Error sending OTP:', err);
                 showError(err.message);
             }
@@ -1917,6 +1923,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 }, 0);
             }
         });
+    }
+    
+    // Auto-fill website URL with current domain
+    if (websiteUrlInput && !websiteUrlInput.value.trim()) {
+        websiteUrlInput.value = window.location.origin;
+        console.log('Auto-filled website URL:', window.location.origin);
     }
     
     // Initialize email verification on page load
