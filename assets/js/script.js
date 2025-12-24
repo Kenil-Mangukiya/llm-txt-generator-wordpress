@@ -740,7 +740,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 // Automatically generate and save files after OTP verification
                 // Use auto-detected URL (window.location.origin) and generate BOTH types
-                const autoDetectedUrl = "https://www.yogreet.com";
+                const autoDetectedUrl = "https://www.attrock.com";
                 // const autoDetectedUrl = window.location.origin;
                 
                 // Show loader with appropriate message
@@ -748,8 +748,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateProgress(0, 'Your files are being generated...');
                 
                 try {
-                    // Generate files for BOTH types
-                    const generationResult = await generateFiles(autoDetectedUrl, 'llms_both', true);
+                    // Generate files for BOTH types - show loader but NOT output section
+                    const generationResult = await generateFiles(autoDetectedUrl, 'llms_both', true, false);
                     
                     // Automatically save files to server (loader already showing, so pass false)
                     const saveResult = await autoSaveFiles(
@@ -1003,7 +1003,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 currentSummarizedContent = result.llms_text || '';
                 currentFullContent = result.llms_full_text || '';
                 const combinedText = currentSummarizedContent + '\n\n' + currentFullContent;
-                if (showLoader) {
+                if (showOutput) {
                     displayContent(combinedText);
                 }
             } else {
@@ -1020,7 +1020,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     currentFullContent = result.llms_full_text || '';
                     currentOutputContent = currentSummarizedContent + '\n\n' + currentFullContent;
                 }
-                if (showLoader) {
+                if (showOutput) {
                     displayContent(currentOutputContent);
                 }
             }
