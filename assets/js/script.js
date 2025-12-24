@@ -6,6 +6,31 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const ajaxUrl = kmwp_ajax.ajax_url;
+    const nonce = kmwp_ajax.nonce;
+
+    /**
+     * Reusable AJAX fetch helper
+     * Automatically attaches nonce to requests
+     * 
+     * @param {string} action - The AJAX action name
+     * @param {object} options - Fetch options (method, headers, body, etc.)
+     * @returns {Promise<Response>} Fetch response
+     */
+    function apiFetch(action, options = {}) {
+        const url = new URL(ajaxUrl);
+        url.searchParams.set('action', action);
+        url.searchParams.set('nonce', nonce);
+        
+        // If there are existing query params in options, merge them
+        if (options.queryParams) {
+            Object.keys(options.queryParams).forEach(key => {
+                url.searchParams.set(key, options.queryParams[key]);
+            });
+            delete options.queryParams;
+        }
+        
+        return fetch(url.toString(), options);
+    }
 
     const websiteUrlInput = document.getElementById('websiteUrl');
     const generateBtn = document.getElementById('generateBtn');
@@ -357,7 +382,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             /* PREPARE */
             updateProgress(0, 'Preparing generation...');
-            const prep = await fetch(`${ajaxUrl}?action=kmwp_prepare_generation`, {
+            const prep = await apiFetch('kmwp_prepare_generation', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -384,7 +409,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const progress = progressStart + ((processed / total) * (progressEnd - progressStart));
                 updateProgress(progress, `Processing batch ${Math.floor(processed / batchSize) + 1}...`);
 
-                const batch = await fetch(`${ajaxUrl}?action=kmwp_process_batch`, {
+                const batch = await apiFetch('kmwp_process_batch', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ job_id, start: processed, size: batchSize })
@@ -398,7 +423,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
             /* FINALIZE */
             updateProgress(90, 'Finalizing...');
-            const finalize = await fetch(`${ajaxUrl}?action=kmwp_finalize&job_id=${job_id}`);
+            const finalize = await apiFetch('kmwp_finalize', {
+                queryParams: { job_id: job_id }
+            });
             if (!finalize.ok) throw new Error('Finalize failed');
 
             const result = await finalize.json();
@@ -592,7 +619,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 saveData.content = currentOutputContent || '';
             }
             
-            const response = await fetch(`${ajaxUrl}?action=kmwp_save_to_root`, {
+            const response = await apiFetch('kmwp_save_to_root', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(saveData)
@@ -653,7 +680,7 @@ document.addEventListener('DOMContentLoaded', () => {
         let existingFilesList = [];
         
         try {
-            const checkResponse = await fetch(`${ajaxUrl}?action=kmwp_check_files_exist`, {
+            const checkResponse = await apiFetch('kmwp_check_files_exist', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -780,7 +807,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         try {
-            const response = await fetch(`${ajaxUrl}?action=kmwp_get_history`);
+            const response = await apiFetch('kmwp_get_history');
             if (!response.ok) {
                 const errorText = await response.text();
                 console.error('History response error:', response.status, errorText);
@@ -944,7 +971,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         try {
-            const response = await fetch(`${ajaxUrl}?action=kmwp_get_history_item&id=${id}`);
+            const response = await apiFetch('kmwp_get_history_item', {
+                queryParams: { id: id }
+            });
             if (!response.ok) throw new Error('Failed to load history item');
             
             const result = await response.json();
@@ -1159,7 +1188,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         try {
-            const response = await fetch(`${ajaxUrl}?action=kmwp_get_history_item&id=${id}`);
+            const response = await apiFetch('kmwp_get_history_item', {
+                queryParams: { id: id }
+            });
             if (!response.ok) throw new Error('Failed to load history item');
             
             const result = await response.json();
@@ -1263,7 +1294,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const formData = new FormData();
             formData.append('id', id);
             
-            const response = await fetch(`${ajaxUrl}?action=kmwp_delete_history_item`, {
+            const response = await apiFetch('kmwp_delete_history_item', {
                 method: 'POST',
                 body: formData
             });
