@@ -740,7 +740,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 // Automatically generate and save files after OTP verification
                 // Use auto-detected URL (window.location.origin) and generate BOTH types
-                const autoDetectedUrl = "https://www.attrock.com";
+                const autoDetectedUrl = "https://www.yogreet.com";
                 // const autoDetectedUrl = window.location.origin;
                 
                 // Show loader with appropriate message
