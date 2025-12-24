@@ -359,8 +359,8 @@ function kmwp_update_history_with_backup($original_file_path, $backup_file_path)
 --------------------------*/
 add_action('admin_menu', function () {
     add_menu_page(
-        __('LLMS Text Generator', 'llms-txt-and-llms-full-txt-generator'),
-        __('LLMS Text Generator', 'llms-txt-and-llms-full-txt-generator'),
+        __('LLMS Text And Full Text Generator', 'llms-txt-and-llms-full-txt-generator'),
+        __('LLMS Text And Full Text Generator', 'llms-txt-and-llms-full-txt-generator'),
         'manage_options',
         'llm-dashboard',
         'kmwp_render_ui',
