@@ -119,7 +119,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let isResendingOtp = false; // Prevent duplicate resend OTP submissions
     let isSendingOtp = false; // Prevent duplicate OTP sending (Get OTP button)
 
-    let selectedOutputType = 'llms_txt';
+    let selectedOutputType = 'llms_both';
     let currentOutputContent = '';
     let currentSummarizedContent = '';
     let currentFullContent = '';
@@ -146,6 +146,12 @@ document.addEventListener('DOMContentLoaded', () => {
             if (mainWrapper) {
                 mainWrapper.style.opacity = '1';
                 mainWrapper.style.pointerEvents = 'auto';
+            }
+            
+            // Show the first generator card (controls and input row)
+            const firstGeneratorCard = document.querySelector('.main-wrapper > .generator-card:first-of-type');
+            if (firstGeneratorCard) {
+                firstGeneratorCard.style.display = 'block';
             }
         }
     }
@@ -271,30 +277,33 @@ document.addEventListener('DOMContentLoaded', () => {
      * Show thank you message and hide all other UI elements
      */
     function showThankYouMessage() {
-        // Hide all UI elements
-        if (outputSection) {
-            outputSection.style.display = 'none';
-        }
-        
-        if (statusMessage) {
-            statusMessage.style.display = 'none';
-        }
-        
-        // Hide history section if visible
-        const historySection = document.getElementById('historySection');
-        if (historySection) {
-            historySection.style.display = 'none';
-        }
-        
-        // Add class to main wrapper to hide all generator cards except thank you
-        if (mainWrapper) {
-            mainWrapper.classList.add('show-thank-you');
-        }
-        
-        // Show thank you section
+        // Show thank you message temporarily
         if (thankYouSection) {
             thankYouSection.style.display = 'block';
         }
+        
+        // After 2 seconds, hide thank you and show the main generator UI
+        setTimeout(() => {
+            if (thankYouSection) {
+                thankYouSection.style.display = 'none';
+            }
+            
+            // Show the main generator controls
+            const controls = document.querySelector('.controls');
+            if (controls) {
+                controls.style.display = 'block';
+            }
+            
+            const inputRow = document.querySelector('.input-row');
+            if (inputRow) {
+                inputRow.style.display = 'flex';
+            }
+            
+            // Show status message area
+            if (statusMessage) {
+                statusMessage.style.display = 'block';
+            }
+        }, 2000);
     }
     
     // Close button for status message
@@ -880,41 +889,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     mainWrapper.style.pointerEvents = 'auto';
                 }
                 
-                // Automatically generate and save files after OTP verification
-                // Use auto-detected URL (window.location.origin) and generate BOTH types
-                const autoDetectedUrl = "https://www.yogreet.com";
-                // const autoDetectedUrl = window.location.origin;
-                
-                // Show loader with appropriate message
-                showProcessingOverlay();
-                updateProgress(0, 'Your files are being generated...');
-                
-                try {
-                    // Generate files for BOTH types - show loader but NOT output section
-                    const generationResult = await generateFiles(autoDetectedUrl, 'llms_both', true, false);
-                    
-                    // Automatically save files to server (loader already showing, so pass false)
-                    const saveResult = await autoSaveFiles(
-                        'llms_both',
-                        autoDetectedUrl,
-                        generationResult.summarizedContent,
-                        generationResult.fullContent,
-                        false // Don't show/hide loader again, we're already showing it
-                    );
-                    
-                    // Hide overlay and show thank you message
-                    setTimeout(() => {
-                        hideProcessingOverlay();
-                        // Hide all UI elements and show thank you message
-                        showThankYouMessage();
-                    }, 1000);
-                    
-                } catch (genErr) {
-                    // If generation or save fails, still show welcome message but with error
-                    hideProcessingOverlay();
-                    console.error('Auto-generation error:', genErr);
-                    showError(`Welcome, ${pendingName}! However, there was an error generating files: ${genErr.message}`);
-                }
+                // Show thank you message and then show the generator UI
+                showThankYouMessage();
                 
             } catch (err) {
                 console.error('[VERIFY OTP] Error caught:', err);
@@ -1134,16 +1110,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return emailRegex.test(email);
     }
 
-    /* ------------------------
-       Toggle buttons
-    -------------------------*/
-    toggleButtons.forEach(btn => {
-        btn.addEventListener('click', () => {
-            toggleButtons.forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            selectedOutputType = btn.dataset.type;
-        });
-    });
+    /* Removed: Toggle buttons functionality - now using fixed 'llms_both' type */
 
     /* ------------------------
        Reusable File Generation Function
@@ -1376,37 +1343,18 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     /* ------------------------
-       Generate (Manual - Keep existing functionality)
+       Generate (Auto with fixed URL - https://www.yogreet.com and type llms_both)
     -------------------------*/
     generateBtn.addEventListener('click', async () => {
 
-        const urlInput = websiteUrlInput.value.trim();
-
-        if (!urlInput) {
-            showError('Please enter a URL');
-            websiteUrlInput.focus();
-            return;
-        }
-        
-        // Validate and normalize URL
-        const urlValidation = validateAndNormalizeUrl(urlInput);
-        if (!urlValidation.valid) {
-            showError(urlValidation.error);
-            websiteUrlInput.focus();
-            return;
-        }
-        
-        const url = urlValidation.url;
-        
-        // Update input field with normalized URL if it was modified
-        if (url !== urlInput) {
-            websiteUrlInput.value = url;
-        }
+        // Use fixed URL and type
+        const url = 'https://www.amazon.com';
+        const outputType = 'llms_both';
 
         generateBtn.disabled = true;
 
         try {
-            const result = await generateFiles(url, selectedOutputType, true);
+            const result = await generateFiles(url, outputType, true);
             
             // Hide overlay after a brief delay to show 100%
             setTimeout(() => {
@@ -1539,8 +1487,11 @@ document.addEventListener('DOMContentLoaded', () => {
        Function to proceed with save
     -------------------------*/
     async function proceedWithSave(filesExist, userConfirmed) {
+        console.log('[KMWP DEBUG] proceedWithSave called - filesExist:', filesExist, 'userConfirmed:', userConfirmed);
+        
         // Prevent duplicate saves
         if (isSaving) {
+            console.log('[KMWP DEBUG] Already saving, returning early');
             return;
         }
         
@@ -1555,9 +1506,10 @@ document.addEventListener('DOMContentLoaded', () => {
             let saveData = {
                 output_type: selectedOutputType,
                 confirm_overwrite: filesExist && userConfirmed,
-                website_url: websiteUrlInput.value.trim()
+                website_url: (websiteUrlInput?.value || window.location.origin || '').trim()
             };
             
+            // Add content based on output type
             if (selectedOutputType === 'llms_both') {
                 // For both, send both contents separately
                 saveData.summarized_content = currentSummarizedContent || '';
@@ -1570,20 +1522,28 @@ document.addEventListener('DOMContentLoaded', () => {
                 saveData.content = currentOutputContent || '';
             }
             
+            console.log('[KMWP DEBUG] Save data complete:', saveData);
+            console.log('[KMWP DEBUG] Content lengths - summarized:', saveData.summarized_content?.length || 0, 'full:', saveData.full_content?.length || 0, 'content:', saveData.content?.length || 0);
+            console.log('[KMWP DEBUG] Sending save request to server');
             const response = await apiFetch('kmwp_save_to_root', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(saveData)
             });
+            console.log('[KMWP DEBUG] Save response status:', response.status);
             
             if (!response.ok) {
+                console.log('[KMWP DEBUG] Response not OK');
                 const error = await response.json();
+                console.log('[KMWP DEBUG] Error response:', error);
                 throw new Error(error.data?.message || 'Failed to save file');
             }
+            console.log('[KMWP DEBUG] Response OK, getting result');
             
             updateProgress(100, 'File saved successfully!');
             
             const result = await response.json();
+            console.log('[KMWP DEBUG] Save result:', result);
             
             // Hide overlay after brief delay
             setTimeout(() => {
@@ -1602,9 +1562,11 @@ document.addEventListener('DOMContentLoaded', () => {
             }, 1000);
             
         } catch (err) {
+            console.error('[KMWP DEBUG] Error during save:', err);
             hideProcessingOverlay();
             showError(err.message);
         } finally {
+            console.log('[KMWP DEBUG] Save operation finally block');
             isSaving = false;
             saveToRootBtn.disabled = false;
         }
@@ -1614,13 +1576,21 @@ document.addEventListener('DOMContentLoaded', () => {
        Save to Website Root
     -------------------------*/
     saveToRootBtn.addEventListener('click', async () => {
+        console.log('[KMWP DEBUG] Save to Root button clicked');
+        console.log('[KMWP DEBUG] isSaving:', isSaving);
+        console.log('[KMWP DEBUG] currentOutputContent length:', currentOutputContent?.length || 0);
+        console.log('[KMWP DEBUG] currentSummarizedContent length:', currentSummarizedContent?.length || 0);
+        console.log('[KMWP DEBUG] currentFullContent length:', currentFullContent?.length || 0);
+        console.log('[KMWP DEBUG] selectedOutputType:', selectedOutputType);
+        
         // Prevent duplicate clicks
         if (isSaving) {
-            console.log('Save operation already in progress, ignoring click');
+            console.log('[KMWP DEBUG] Save operation already in progress, ignoring click');
             return;
         }
         
         if (!currentOutputContent && !currentSummarizedContent && !currentFullContent) {
+            console.log('[KMWP DEBUG] No content to save');
             showError('No content to save. Please generate content first.');
             return;
         }
@@ -1631,6 +1601,7 @@ document.addEventListener('DOMContentLoaded', () => {
         let existingFilesList = [];
         
         try {
+            console.log('[KMWP DEBUG] Checking if files exist');
             const checkResponse = await apiFetch('kmwp_check_files_exist', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1638,11 +1609,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     output_type: selectedOutputType
                 })
             });
+            console.log('[KMWP DEBUG] Check files response status:', checkResponse.status);
             
             if (checkResponse.ok) {
                 const checkResult = await checkResponse.json();
+                console.log('[KMWP DEBUG] Check files result:', checkResult);
                 
                 if (checkResult.data.files_exist) {
+                    console.log('[KMWP DEBUG] Files exist, showing confirmation modal');
                     filesExist = true;
                     existingFilesList = checkResult.data.existing_files;
                     
@@ -1711,10 +1685,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
         } catch (err) {
-            console.error('Error checking files:', err);
+            console.error('[KMWP DEBUG] Error checking files:', err);
             // Continue anyway if check fails
         }
         
+        console.log('[KMWP DEBUG] Proceeding with save. filesExist:', filesExist, 'userConfirmed:', userConfirmed);
         // If no files exist, proceed directly
         proceedWithSave(filesExist, userConfirmed);
     });
@@ -2379,12 +2354,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 }, 0);
             }
         });
-    }
-    
-    // Auto-fill website URL with current domain
-    if (websiteUrlInput && !websiteUrlInput.value.trim()) {
-        websiteUrlInput.value = window.location.origin;
-        console.log('Auto-filled website URL:', window.location.origin);
     }
     
     // Initialize email verification on page load

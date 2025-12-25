@@ -90,6 +90,14 @@
     display: block;
   }
   
+  .description-text {
+    font-size: 14px;
+    color: #64748b;
+    line-height: 1.6;
+    margin: 10px 0 15px 0;
+    font-weight: 400;
+  }
+  
   .controls {
     display: flex;
     flex-wrap: wrap;

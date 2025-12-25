@@ -96,6 +96,7 @@ function kmwp_create_history_table() {
         user_id bigint(20) unsigned NOT NULL,
         website_url varchar(500) NOT NULL,
         output_type varchar(50) NOT NULL,
+        content_hash varchar(32) NOT NULL,
         summarized_content longtext,
         full_content longtext,
         file_path varchar(500),
@@ -103,7 +104,8 @@ function kmwp_create_history_table() {
         PRIMARY KEY (id),
         KEY user_id (user_id),
         KEY website_url (website_url(191)),
-        KEY created_at (created_at)
+        KEY created_at (created_at),
+        KEY content_hash (content_hash)
     ) $charset_collate;";
     
     require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
@@ -134,143 +136,24 @@ function kmwp_save_file_history($website_url, $output_type, $summarized_content 
         return false;
     }
     
-    // Calculate content hash for exact duplicate detection
+    // Calculate content hash
     $content_hash = md5($summarized_content . $full_content);
-    $content_length = strlen($summarized_content . $full_content);
-    $content_preview = substr($summarized_content . $full_content, 0, 200); // First 200 chars for comparison
-    
-    // Check 1: Exact content match using PHP MD5 hash (most reliable)
-    // Compare the hash we calculated in PHP with stored content
-    $exact_duplicate = $wpdb->get_row(
-        $wpdb->prepare(
-            "SELECT id FROM $table_name 
-            WHERE user_id = %d 
-            AND website_url = %s 
-            AND output_type = %s 
-            AND MD5(CONCAT(COALESCE(summarized_content, ''), COALESCE(full_content, ''))) = %s
-            ORDER BY created_at DESC 
-            LIMIT 1",
-            $user_id,
-            sanitize_text_field($website_url),
-            sanitize_text_field($output_type),
-            $content_hash
-        ),
-        ARRAY_A
-    );
-    
-    if ($exact_duplicate) {
-        return $exact_duplicate['id'];
-    }
-    
-    // Check 1b: Also check by comparing content preview and length (more reliable than MD5 in some cases)
-    $preview_duplicate = $wpdb->get_row(
-        $wpdb->prepare(
-            "SELECT id FROM $table_name 
-            WHERE user_id = %d 
-            AND website_url = %s 
-            AND output_type = %s 
-            AND LENGTH(CONCAT(COALESCE(summarized_content, ''), COALESCE(full_content, ''))) = %d
-            AND LEFT(CONCAT(COALESCE(summarized_content, ''), COALESCE(full_content, '')), 200) = %s
-            ORDER BY created_at DESC 
-            LIMIT 1",
-            $user_id,
-            sanitize_text_field($website_url),
-            sanitize_text_field($output_type),
-            $content_length,
-            $content_preview
-        ),
-        ARRAY_A
-    );
-    
-    if ($preview_duplicate) {
-        return $preview_duplicate['id'];
-    }
-    
-    // Check 2: Same URL + output_type + content length within last 10 seconds (catch rapid duplicates)
-    // Extended time window to catch user double-clicks or rapid saves
-    $recent_duplicate = $wpdb->get_row(
-        $wpdb->prepare(
-            "SELECT id FROM $table_name 
-            WHERE user_id = %d 
-            AND website_url = %s 
-            AND output_type = %s 
-            AND LENGTH(CONCAT(COALESCE(summarized_content, ''), COALESCE(full_content, ''))) = %d
-            AND created_at > DATE_SUB(NOW(), INTERVAL 10 SECOND)
-            ORDER BY created_at DESC 
-            LIMIT 1",
-            $user_id,
-            sanitize_text_field($website_url),
-            sanitize_text_field($output_type),
-            $content_length
-        ),
-        ARRAY_A
-    );
-    
-    if ($recent_duplicate) {
-        return $recent_duplicate['id'];
-    }
-    
-    // Check 3: Same URL + output_type within last 5 seconds (catch any rapid saves regardless of content)
-    $rapid_duplicate = $wpdb->get_row(
-        $wpdb->prepare(
-            "SELECT id FROM $table_name 
-            WHERE user_id = %d 
-            AND website_url = %s 
-            AND output_type = %s 
-            AND created_at > DATE_SUB(NOW(), INTERVAL 5 SECOND)
-            ORDER BY created_at DESC 
-            LIMIT 1",
-            $user_id,
-            sanitize_text_field($website_url),
-            sanitize_text_field($output_type)
-        ),
-        ARRAY_A
-    );
-    
-    if ($rapid_duplicate) {
-        return $rapid_duplicate['id'];
-    }
     
     // Prepare data
     $data = [
         'user_id' => $user_id,
         'website_url' => sanitize_text_field($website_url),
         'output_type' => sanitize_text_field($output_type),
-        'summarized_content' => $summarized_content, // Don't use wp_kses_post as it might strip content
+        'content_hash' => $content_hash,
+        'summarized_content' => $summarized_content,
         'full_content' => $full_content,
         'file_path' => sanitize_text_field($file_path),
     ];
     
-    $formats = ['%d', '%s', '%s', '%s', '%s', '%s'];
+    $formats = ['%d', '%s', '%s', '%s', '%s', '%s', '%s'];
     
-    // Final check right before insert to catch any race conditions
-    // Check for same URL + output_type + content hash within last 3 seconds
-    $last_check = $wpdb->get_var(
-        $wpdb->prepare(
-            "SELECT id FROM $table_name 
-            WHERE user_id = %d 
-            AND website_url = %s 
-            AND output_type = %s 
-            AND MD5(CONCAT(COALESCE(summarized_content, ''), COALESCE(full_content, ''))) = %s
-            AND created_at > DATE_SUB(NOW(), INTERVAL 3 SECOND)
-            ORDER BY created_at DESC 
-            LIMIT 1",
-            $user_id,
-            sanitize_text_field($website_url),
-            sanitize_text_field($output_type),
-            $content_hash
-        )
-    );
-    
-    if ($last_check) {
-        return intval($last_check);
-    }
-    
-    $result = $wpdb->insert(
-        $table_name,
-        $data,
-        $formats
-    );
+    // Insert new history entry - allow all saves including duplicates
+    $result = $wpdb->insert($table_name, $data, $formats);
     
     if ($result === false) {
         return false;
@@ -725,7 +608,9 @@ function create_backup($file_path) {
 
 /* save_to_root */
 add_action('wp_ajax_kmwp_save_to_root', function () {
+    error_log('[KMWP DEBUG] kmwp_save_to_root AJAX called');
     kmwp_verify_ajax();
+    error_log('[KMWP DEBUG] AJAX verification passed');
     
     // GLOBAL SAVE LOCK: Prevent multiple simultaneous save operations
     $global_lock_file = ABSPATH . '.kmwp_save_lock';
@@ -773,15 +658,21 @@ add_action('wp_ajax_kmwp_save_to_root', function () {
     
     try {
         $body = json_decode(file_get_contents('php://input'), true);
+        error_log('[KMWP DEBUG] Request body received: ' . print_r($body, true));
+        
         $output_type = sanitize_text_field($body['output_type'] ?? 'llms_txt');
         $confirm_overwrite = isset($body['confirm_overwrite']) ? (bool)$body['confirm_overwrite'] : false;
         $website_url = sanitize_text_field($body['website_url'] ?? '');
+        
+        error_log('[KMWP DEBUG] Parsed values - output_type: ' . $output_type . ', confirm_overwrite: ' . ($confirm_overwrite ? 'true' : 'false') . ', website_url: ' . $website_url);
         
         // CRITICAL: Check file existence BEFORE any file operations
         // This ensures we only backup files that existed before this request, not files created during this request
         $file_existed_before = [];
         $file_existed_before['llm.txt'] = file_exists(ABSPATH . 'llm.txt');
         $file_existed_before['llm-full.txt'] = file_exists(ABSPATH . 'llm-full.txt');
+        
+        error_log('[KMWP DEBUG] File existence check - llm.txt: ' . ($file_existed_before['llm.txt'] ? 'exists' : 'not exists') . ', llm-full.txt: ' . ($file_existed_before['llm-full.txt'] ? 'exists' : 'not exists'));
     
     // Initialize request-level backup registry
     if (!isset($GLOBALS['kmwp_backed_up_files'])) {
@@ -820,7 +711,11 @@ add_action('wp_ajax_kmwp_save_to_root', function () {
              * llm.txt and llm-full.txt must be publicly accessible at the site root
              * (similar to robots.txt / sitemap.xml) so LLMs and crawlers can discover them.
              */
+            error_log('[KMWP DEBUG] Processing llms_both - writing llm.txt');
+            error_log('[KMWP DEBUG] Summarized content length: ' . strlen($summarized_content));
+            
             $result_summary = file_put_contents($file_path_summary, $summarized_content);
+            error_log('[KMWP DEBUG] file_put_contents result for llm.txt: ' . ($result_summary !== false ? 'success (' . $result_summary . ' bytes)' : 'failed'));
             
             if ($result_summary !== false) {
                 $saved_files[] = [

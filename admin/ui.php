@@ -17,17 +17,12 @@
         <section class="generator-card">
             <div class="controls">
                 <div class="toggle-group">
-                    <label class="section-label" for="websiteUrl">Choose Output Type:</label>
-                    <div class="toggle-buttons">
-                        <button class="toggle-btn active" data-type="llms_txt">LLMs Txt (Summarized)</button>
-                        <button class="toggle-btn" data-type="llms_full_txt">LLMs Full Txt (Full Content)</button>
-                        <button class="toggle-btn" data-type="llms_both">Both</button>
-                    </div>
+                    <label class="section-label">Generate Files</label>
+                    <p class="description-text">Our AI-powered tool analyzes your website content and generates optimized files for LLMs. These files help language models better understand and process your website information for improved AI interactions and indexing.</p>
                 </div>
             </div>
             <div class="input-row">
-                <input type="text" id="websiteUrl" placeholder="Paste URL here..." required>
-                <button id="generateBtn" class="btn generate">LLMs Txt Generator</button>
+                <button id="generateBtn" class="btn generate">Generate Files</button>
                 <button id="clearBtn" class="btn clear">Clear</button>
                 <button id="showHistoryBtn" class="btn history">View History</button>
             </div>
