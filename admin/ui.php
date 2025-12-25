@@ -15,10 +15,12 @@
 <body>
     <main class="main-wrapper">
         <section class="generator-card">
-            <div class="controls">
-                <div class="toggle-group">
-                    <label class="section-label">Generate Files</label>
-                    <p class="description-text">Our AI-powered tool analyzes your website content and generates optimized files for LLMs. These files help language models better understand and process your website information for improved AI interactions and indexing.</p>
+            <div class="toggle-group">
+                <label class="section-label">Choose Output Type:</label>
+                <div class="toggle-buttons">
+                    <button class="toggle-btn" data-type="llms_txt">LLMs Txt (Summarized)</button>
+                    <button class="toggle-btn" data-type="llms_full_txt">LLMs Full Txt (Full Content)</button>
+                    <button class="toggle-btn active" data-type="llms_both">Both</button>
                 </div>
             </div>
             <div class="input-row">
@@ -30,23 +32,50 @@
                 <button type="button" id="statusMessageClose" class="status-message-close" aria-label="Close" style="display: none;">×</button>
             </div>
         </section>
-        <section class="generator-card" id="outputSection" style="display: none;">
-            <div class="output">
-                <div class="output-header">
-                    <h2>Generated Output</h2>
-                    <button id="closeOutputBtn" class="btn-close-output" aria-label="Close">×</button>
+        <!-- Success Card (Compact) -->
+        <section class="generator-card" id="successCard" style="display: none;">
+            <div class="success-card-content">
+                <div class="success-icon">✓</div>
+                <div class="success-info">
+                    <h3>Files Generated Successfully!</h3>
+                    <div id="successFileStats"></div>
                 </div>
-                <div class="iframe-container">
-                    <iframe id="outputIframe" src="about:blank"></iframe>
-                </div>
-                <div class="action-buttons">
-                    <button id="copyBtn" class="btn copy">Copy to Clipboard</button>
+                <div class="success-actions">
+                    <button id="viewOutputBtn" class="btn view-output">View Output</button>
                     <button id="saveToRootBtn" class="btn save-root">Save to Website Root</button>
-                    <button id="downloadBtn" class="btn download">Download text file</button>
-                    <span id="copyMessage" style="display: none;">Copied!</span>
                 </div>
             </div>
         </section>
+        <!-- Output Preview Modal -->
+        <div role="dialog" aria-modal="true" class="fade custom-modal modal" id="outputPreviewModal" style="display: none;" tabindex="-1">
+            <div class="modal-dialog modal-dialog-centered output-preview-modal">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h2 class="modal-title">Generated Output</h2>
+                        <button type="button" class="btn-close" id="closeOutputPreviewBtn" aria-label="Close">×</button>
+                    </div>
+                    <!-- Tabs for both files -->
+                    <div class="modal-tabs" id="modalTabs" style="display: none;">
+                        <button class="tab-btn active" id="tab-llms-txt" data-tab="llms_txt">LLM Txt</button>
+                        <button class="tab-btn" id="tab-llms-full-txt" data-tab="llms_full_txt">LLM Full Txt</button>
+                    </div>
+                    <div class="modal-body">
+                        <!-- LLM Txt content -->
+                        <div id="tab-content-llms_txt" class="tab-content active">
+                            <div class="iframe-container">
+                                <iframe id="outputIframe" src="about:blank"></iframe>
+                            </div>
+                        </div>
+                        <!-- LLM Full Txt content -->
+                        <div id="tab-content-llms_full_txt" class="tab-content" style="display: none;">
+                            <div class="iframe-container">
+                                <iframe id="outputIframeFullTxt" src="about:blank"></iframe>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
         <section class="generator-card" id="historySection" style="display: none;">
             <div class="history-header">
                 <h2>File History</h2>

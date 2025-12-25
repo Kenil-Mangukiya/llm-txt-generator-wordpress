@@ -72,12 +72,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const statusMessage = document.getElementById('statusMessage');
     const statusMessageText = document.getElementById('statusMessageText');
     const statusMessageClose = document.getElementById('statusMessageClose');
-    const outputSection = document.getElementById('outputSection');
     const outputIframe = document.getElementById('outputIframe');
-    const copyBtn = document.getElementById('copyBtn');
     const saveToRootBtn = document.getElementById('saveToRootBtn');
-    const downloadBtn = document.getElementById('downloadBtn');
-    const clearBtn = document.getElementById('clearBtn');
+    const viewOutputBtn = document.getElementById('viewOutputBtn');
     const toggleButtons = document.querySelectorAll('.toggle-btn');
     const processingOverlay = document.getElementById('processingOverlay');
     const progressBar = document.getElementById('progressBar');
@@ -90,7 +87,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const showHistoryBtn = document.getElementById('showHistoryBtn');
     const refreshHistoryBtn = document.getElementById('refreshHistoryBtn');
     const closeHistoryBtn = document.getElementById('closeHistoryBtn');
-    const closeOutputBtn = document.getElementById('closeOutputBtn');
+    const successCard = document.getElementById('successCard');
+    const outputPreviewModal = document.getElementById('outputPreviewModal');
+    const closeOutputPreviewBtn = document.getElementById('closeOutputPreviewBtn');
     const historyViewModal = document.getElementById('historyViewModal');
     const historyViewCloseBtn = document.getElementById('historyViewCloseBtn');
     const historyViewCloseBtn2 = document.getElementById('historyViewCloseBtn2');
@@ -325,12 +324,24 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function showProcessingOverlay() {
+    function showProcessingOverlay(websiteUrl = null) {
         if (processingOverlay) {
             processingOverlay.classList.add('show');
             progressBar.style.width = '0%';
             processingPercent.textContent = '0%';
-            processingDetail.textContent = 'Preparing...';
+            
+            // Extract domain from URL if provided
+            if (websiteUrl) {
+                try {
+                    const urlObj = new URL(websiteUrl);
+                    const domain = urlObj.hostname || urlObj.origin;
+                    processingDetail.textContent = `Processing: ${domain}`;
+                } catch (e) {
+                    processingDetail.textContent = 'Processing website content...';
+                }
+            } else {
+                processingDetail.textContent = 'Preparing...';
+            }
         }
     }
 
@@ -476,18 +487,67 @@ document.addEventListener('DOMContentLoaded', () => {
         cleanedContent = lines.join('\n');
         
         currentOutputContent = cleanedContent;
-        outputSection.style.display = 'block';
+
+        // For "both" type, display only summarized content in the main iframe
+        let iframeContent = cleanedContent;
+        if (selectedOutputType === 'llms_both' && currentSummarizedContent) {
+            iframeContent = currentSummarizedContent.trim();
+        }
 
         const iframeDoc = outputIframe.contentDocument || outputIframe.contentWindow.document;
         iframeDoc.open();
         // Write without extra indentation to avoid adding spaces
         iframeDoc.write('<html><body style="white-space:pre-wrap;font-family:monospace">' + 
-            cleanedContent.replace(/</g, '&lt;') + 
+            iframeContent.replace(/</g, '&lt;') + 
             '</body></html>');
         iframeDoc.close();
+        
+        // Show success card with file stats
+        displaySuccessCard();
+    }
 
-        copyBtn.style.display = 'inline-block';
-        downloadBtn.style.display = 'inline-block';
+    function displaySuccessCard() {
+        if (!successCard) {
+            console.warn('[KMWP DEBUG] Success card element not found');
+            return;
+        }
+        
+        const successFileStats = document.getElementById('successFileStats');
+        if (!successFileStats) {
+            console.warn('[KMWP DEBUG] Success file stats element not found');
+            return;
+        }
+        
+        // Calculate file sizes
+        let stats = [];
+        
+        if (selectedOutputType === 'llms_both') {
+            // For both, show both file sizes
+            const summContent = currentSummarizedContent || '';
+            const fullContent = currentFullContent || '';
+            
+            const summSize = Math.max(1, Math.round(new Blob([summContent]).size / 1024));
+            const fullSize = Math.max(1, Math.round(new Blob([fullContent]).size / 1024));
+            
+            stats.push(`<strong>llm.txt:</strong> ${summSize}KB`);
+            stats.push(`<strong>llm-full.txt:</strong> ${fullSize}KB`);
+        } else if (selectedOutputType === 'llms_txt') {
+            const content = currentSummarizedContent || currentOutputContent || '';
+            const size = Math.max(1, Math.round(new Blob([content]).size / 1024));
+            stats.push(`<strong>llm.txt:</strong> ${size}KB`);
+        } else if (selectedOutputType === 'llms_full_txt') {
+            const content = currentFullContent || currentOutputContent || '';
+            const size = Math.max(1, Math.round(new Blob([content]).size / 1024));
+            stats.push(`<strong>llm-full.txt:</strong> ${size}KB`);
+        } else if (currentOutputContent) {
+            const size = Math.max(1, Math.round(new Blob([currentOutputContent]).size / 1024));
+            stats.push(`<strong>Total:</strong> ${size}KB`);
+        }
+        
+        if (stats.length > 0) {
+            successFileStats.innerHTML = stats.join(' + ');
+            successCard.style.display = 'block';
+        }
     }
 
     /* ------------------------
@@ -1138,9 +1198,10 @@ document.addEventListener('DOMContentLoaded', () => {
      * @param {string} outputType - The output type ('llms_txt', 'llms_full_txt', or 'llms_both')
      * @param {boolean} showLoader - Whether to show the processing overlay (default: true)
      * @param {boolean} showOutput - Whether to display the output section (default: true)
+     * @param {string} displayUrl - The URL to display in the loader (optional)
      * @returns {Promise<Object>} The generation result with content
      */
-    async function generateFiles(url, outputType = 'llms_both', showLoader = true, showOutput = true) {
+    async function generateFiles(url, outputType = 'llms_both', showLoader = true, showOutput = true, displayUrl = null) {
         // Validate and normalize URL
         const urlValidation = validateAndNormalizeUrl(url);
         if (!urlValidation.valid) {
@@ -1150,13 +1211,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const normalizedUrl = urlValidation.url;
         
         if (showLoader) {
-            showProcessingOverlay();
+            showProcessingOverlay(displayUrl || url);
         }
 
         try {
             /* PREPARE */
             if (showLoader) {
-                updateProgress(0, 'Preparing generation...');
+                updateProgress(5, '');
             }
             const prep = await apiFetch('kmwp_prepare_generation', {
                 method: 'POST',
@@ -1364,19 +1425,18 @@ document.addEventListener('DOMContentLoaded', () => {
     -------------------------*/
     generateBtn.addEventListener('click', async () => {
 
-        // Use fixed URL and type
+        // Use fixed URL and type based on selected output type
         const url = 'https://www.yogreet.com';
-        const outputType = 'llms_both';
+        const outputType = selectedOutputType || 'llms_both';
 
         generateBtn.disabled = true;
 
         try {
-            const result = await generateFiles(url, outputType, true);
+            const result = await generateFiles(url, outputType, true, url);
             
-            // Hide overlay after a brief delay to show 100%
+            // Hide overlay after a brief delay
             setTimeout(() => {
                 hideProcessingOverlay();
-                showSuccess('Generation completed');
             }, 500);
 
         } catch (err) {
@@ -1388,117 +1448,29 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     /* ------------------------
-       Copy to Clipboard
+       Handle Toggle Button Clicks for File Type Selection
     -------------------------*/
-    copyBtn.addEventListener('click', async () => {
-        
-        if (!currentOutputContent && !currentSummarizedContent && !currentFullContent) {
-            showError('No content to copy. Please generate content first.');
-            return;
-        }
-        
-        // Determine which content to copy based on output type
-        let contentToCopy = '';
-        if (selectedOutputType === 'llms_both') {
-            // For both, copy the combined content
-            contentToCopy = currentOutputContent || (currentSummarizedContent + '\n\n' + currentFullContent);
-        } else if (selectedOutputType === 'llms_txt') {
-            contentToCopy = currentSummarizedContent || currentOutputContent || '';
-        } else if (selectedOutputType === 'llms_full_txt') {
-            contentToCopy = currentFullContent || currentOutputContent || '';
-        } else {
-            contentToCopy = currentOutputContent || '';
-        }
-        
-        if (!contentToCopy) {
-            showError('No content to copy.');
-            return;
-        }
-        
-        // Store original button text
-        const originalText = copyBtn.textContent;
-        
-        try {
-            // Use Clipboard API (modern approach)
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-                await navigator.clipboard.writeText(contentToCopy);
-                
-                // Change button text to "Copied!"
-                copyBtn.textContent = 'Copied!';
-                copyBtn.style.background = '#16a34a'; // Green color
-                
-                // Show success message
-                showSuccess('Content copied to clipboard successfully!');
-                
-                // Reset button after 2 seconds
-                setTimeout(() => {
-                    copyBtn.textContent = originalText;
-                    copyBtn.style.background = ''; // Reset to original
-                }, 2000);
-                
-            } else {
-                // Fallback for older browsers
-                const textArea = document.createElement('textarea');
-                textArea.value = contentToCopy;
-                textArea.style.position = 'fixed';
-                textArea.style.left = '-999999px';
-                textArea.style.top = '-999999px';
-                document.body.appendChild(textArea);
-                textArea.focus();
-                textArea.select();
-                
-                try {
-                    const successful = document.execCommand('copy');
-                    if (successful) {
-                        // Change button text to "Copied!"
-                        copyBtn.textContent = 'Copied!';
-                        copyBtn.style.background = '#16a34a'; // Green color
-                        
-                        // Show success message
-                        showSuccess('Content copied to clipboard successfully!');
-                        
-                        // Reset button after 2 seconds
-                        setTimeout(() => {
-                            copyBtn.textContent = originalText;
-                            copyBtn.style.background = ''; // Reset to original
-                        }, 2000);
-                    } else {
-                        throw new Error('Copy command failed');
-                    }
-                } catch (err) {
-                    throw new Error('Failed to copy. Please try selecting and copying manually.');
-                } finally {
-                    document.body.removeChild(textArea);
-                }
-            }
-        } catch (err) {
-            showError(err.message);
-        }
-    });
+    if (toggleButtons && toggleButtons.length > 0) {
+        toggleButtons.forEach(btn => {
+            btn.addEventListener('click', function() {
+                // Remove active class from all buttons
+                toggleButtons.forEach(b => b.classList.remove('active'));
+                // Add active class to clicked button
+                this.classList.add('active');
+                // Update selected output type
+                selectedOutputType = this.getAttribute('data-type');
+                console.log('[KMWP DEBUG] Selected output type:', selectedOutputType);
+            });
+        });
+    } else {
+        console.warn('[KMWP DEBUG] No toggle buttons found in DOM');
+    }
 
-    /* ------------------------
-       Download
-    -------------------------*/
-    downloadBtn.addEventListener('click', () => {
-
-        if (selectedOutputType === 'llms_both' && storedZipBlob) {
-            const url = URL.createObjectURL(storedZipBlob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'llms-both.zip';
-            a.click();
-            URL.revokeObjectURL(url);
-            return;
-        }
-
-        const blob = new Blob([currentOutputContent], { type: 'text/plain' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = selectedOutputType === 'llms_full_txt' ? 'llm-full.txt' : 'llm.txt';
-        a.click();
-        URL.revokeObjectURL(url);
-    });
+    /* ========================
+       REMOVED: Copy to Clipboard button
+       REMOVED: Download button
+       Reason: Client feedback - simplify UI, focus on Save to Website Root functionality
+    ========================*/
 
     /* ------------------------
        Function to proceed with save
@@ -1562,9 +1534,15 @@ document.addEventListener('DOMContentLoaded', () => {
             const result = await response.json();
             console.log('[KMWP DEBUG] Save result:', result);
             
-            // Hide overlay after brief delay
+            // Hide overlay and success card after brief delay
             setTimeout(() => {
                 hideProcessingOverlay();
+                if (successCard) {
+                    successCard.style.display = 'none';
+                }
+                if (outputPreviewModal) {
+                    outputPreviewModal.classList.remove('show');
+                }
                 let message = result.data.files_saved 
                     ? `Files saved successfully! ${result.data.files_saved.join(', ')}`
                     : `File saved successfully! Accessible at: ${result.data.file_url}`;
@@ -1711,29 +1689,120 @@ document.addEventListener('DOMContentLoaded', () => {
         proceedWithSave(filesExist, userConfirmed);
     });
 
-    /* ------------------------
-       Clear
-    -------------------------*/
-    if (clearBtn) {
-        clearBtn.addEventListener('click', () => {
-            websiteUrlInput.value = '';
-            websiteUrlInput.classList.remove('url-invalid', 'url-valid');
-            outputSection.style.display = 'none';
-            clearStatusMessage();
-            currentOutputContent = '';
-            currentSummarizedContent = '';
-            currentFullContent = '';
-            storedZipBlob = null;
-            // Do NOT reset the output type selection - preserve selectedOutputType
-            // Do NOT reset toggle buttons - they should remain as selected
+    /* ========================
+       REMOVED: Clear button
+       Reason: Client feedback - simplify UI
+    ========================*/
+    
+    // View Output button - opens modal
+    if (viewOutputBtn) {
+        viewOutputBtn.addEventListener('click', () => {
+            if (outputPreviewModal) {
+                outputPreviewModal.classList.add('show');
+                setupOutputTabs();
+            }
         });
     }
     
-    // Close output section button
-    if (closeOutputBtn) {
-        closeOutputBtn.addEventListener('click', () => {
-            outputSection.style.display = 'none';
+    // Close output preview modal button
+    if (closeOutputPreviewBtn) {
+        closeOutputPreviewBtn.addEventListener('click', () => {
+            if (outputPreviewModal) {
+                outputPreviewModal.classList.remove('show');
+            }
         });
+    }
+    
+    // Close output preview modal when clicking outside
+    if (outputPreviewModal) {
+        outputPreviewModal.addEventListener('click', (e) => {
+            if (e.target === outputPreviewModal) {
+                outputPreviewModal.classList.remove('show');
+            }
+        });
+    }
+
+    // Setup tabs in output modal
+    function setupOutputTabs() {
+        const modalTabs = document.getElementById('modalTabs');
+        const tabButtons = document.querySelectorAll('.tab-btn');
+        const tabContents = document.querySelectorAll('.tab-content');
+        const outputIframeFullTxt = document.getElementById('outputIframeFullTxt');
+        
+        // Show tabs only if both contents are available
+        if (selectedOutputType === 'llms_both' && currentSummarizedContent && currentFullContent) {
+            // Show tabs
+            if (modalTabs) {
+                modalTabs.style.display = 'flex';
+            }
+            
+            // Ensure first tab is active
+            tabButtons.forEach((btn, index) => {
+                btn.classList.remove('active');
+                if (index === 0) btn.classList.add('active');
+            });
+            
+            // Ensure first tab content is visible, others hidden
+            tabContents.forEach((content, index) => {
+                if (index === 0) {
+                    content.classList.add('active');
+                    content.style.display = 'block';
+                } else {
+                    content.classList.remove('active');
+                    content.style.display = 'none';
+                }
+            });
+            
+            // Populate full txt iframe
+            if (outputIframeFullTxt) {
+                const iframeDoc = outputIframeFullTxt.contentDocument || outputIframeFullTxt.contentWindow.document;
+                iframeDoc.open();
+                iframeDoc.write('<html><body style="white-space:pre-wrap;font-family:monospace">' + 
+                    currentFullContent.trim().replace(/</g, '&lt;') + 
+                    '</body></html>');
+                iframeDoc.close();
+            }
+            
+            // Add tab click handlers (remove old listeners by cloning)
+            tabButtons.forEach(btn => {
+                const newBtn = btn.cloneNode(true);
+                btn.parentNode.replaceChild(newBtn, btn);
+            });
+            
+            // Re-attach event listeners to new buttons
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const tabId = this.getAttribute('data-tab');
+                    
+                    // Update active tab button
+                    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
+                    
+                    // Update visible content
+                    document.querySelectorAll('.tab-content').forEach(content => {
+                        content.classList.remove('active');
+                        content.style.display = 'none';
+                    });
+                    
+                    const tabContent = document.getElementById('tab-content-' + tabId);
+                    if (tabContent) {
+                        tabContent.classList.add('active');
+                        tabContent.style.display = 'block';
+                    }
+                });
+            });
+        } else {
+            // Hide tabs for single file selection
+            if (modalTabs) {
+                modalTabs.style.display = 'none';
+            }
+            // Ensure content is visible
+            tabContents.forEach(content => {
+                content.style.display = 'block';
+                content.classList.add('active');
+            });
+        }
     }
 
     /* ------------------------
