@@ -23,7 +23,6 @@
             </div>
             <div class="input-row">
                 <button id="generateBtn" class="btn generate">Generate Files</button>
-                <button id="clearBtn" class="btn clear">Clear</button>
                 <button id="showHistoryBtn" class="btn history">View History</button>
             </div>
             <div id="statusMessage" class="status-message">

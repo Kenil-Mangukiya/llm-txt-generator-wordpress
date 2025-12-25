@@ -802,6 +802,12 @@ add_action('wp_ajax_kmwp_save_to_root', function () {
         
         if ($history_id === false) {
             // History save failed silently
+        } else {
+            // Add history info to response for immediate UI update
+            $response_data['history_id'] = $history_id;
+            $response_data['created_at'] = current_time('mysql');
+            $response_data['output_type'] = 'llms_both';
+            $response_data['website_url'] = $website_url ?: 'Unknown';
         }
         
         wp_send_json_success($response_data);
@@ -887,6 +893,12 @@ add_action('wp_ajax_kmwp_save_to_root', function () {
     
     if ($history_id === false) {
         // History save failed silently
+    } else {
+        // Add history info to response for immediate UI update
+        $response_data['history_id'] = $history_id;
+        $response_data['created_at'] = current_time('mysql');
+        $response_data['output_type'] = $output_type;
+        $response_data['website_url'] = $website_url ?: 'Unknown';
     }
     
     wp_send_json_success($response_data);

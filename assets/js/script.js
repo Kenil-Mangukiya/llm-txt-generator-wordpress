@@ -282,10 +282,16 @@ document.addEventListener('DOMContentLoaded', () => {
             thankYouSection.style.display = 'block';
         }
         
-        // After 2 seconds, hide thank you and show the main generator UI
+        // After 1 second, hide thank you and show the main generator UI
         setTimeout(() => {
             if (thankYouSection) {
                 thankYouSection.style.display = 'none';
+            }
+            
+            // Show the main generator card (parent container)
+            const firstGeneratorCard = document.querySelector('.main-wrapper > .generator-card:first-of-type');
+            if (firstGeneratorCard) {
+                firstGeneratorCard.style.display = 'block';
             }
             
             // Show the main generator controls
@@ -303,7 +309,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (statusMessage) {
                 statusMessage.style.display = 'block';
             }
-        }, 2000);
+            
+            // Ensure main wrapper is visible
+            if (mainWrapper) {
+                mainWrapper.style.opacity = '1';
+                mainWrapper.style.pointerEvents = 'auto';
+            }
+        }, 1000);
     }
     
     // Close button for status message
@@ -889,8 +901,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     mainWrapper.style.pointerEvents = 'auto';
                 }
                 
-                // Show thank you message and then show the generator UI
-                showThankYouMessage();
+                // Show OTP verified success message
+                showSuccess('OTP Verified Successfully!');
+                
+                // After a brief delay, show thank you message and then show the generator UI
+                setTimeout(() => {
+                    showThankYouMessage();
+                }, 1500);
                 
             } catch (err) {
                 console.error('[VERIFY OTP] Error caught:', err);
@@ -1348,7 +1365,7 @@ document.addEventListener('DOMContentLoaded', () => {
     generateBtn.addEventListener('click', async () => {
 
         // Use fixed URL and type
-        const url = 'https://www.amazon.com';
+        const url = 'https://www.yogreet.com';
         const outputType = 'llms_both';
 
         generateBtn.disabled = true;
@@ -1697,18 +1714,20 @@ document.addEventListener('DOMContentLoaded', () => {
     /* ------------------------
        Clear
     -------------------------*/
-    clearBtn.addEventListener('click', () => {
-        websiteUrlInput.value = '';
-        websiteUrlInput.classList.remove('url-invalid', 'url-valid');
-        outputSection.style.display = 'none';
-        clearStatusMessage();
-        currentOutputContent = '';
-        currentSummarizedContent = '';
-        currentFullContent = '';
-        storedZipBlob = null;
-        // Do NOT reset the output type selection - preserve selectedOutputType
-        // Do NOT reset toggle buttons - they should remain as selected
-    });
+    if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+            websiteUrlInput.value = '';
+            websiteUrlInput.classList.remove('url-invalid', 'url-valid');
+            outputSection.style.display = 'none';
+            clearStatusMessage();
+            currentOutputContent = '';
+            currentSummarizedContent = '';
+            currentFullContent = '';
+            storedZipBlob = null;
+            // Do NOT reset the output type selection - preserve selectedOutputType
+            // Do NOT reset toggle buttons - they should remain as selected
+        });
+    }
     
     // Close output section button
     if (closeOutputBtn) {
