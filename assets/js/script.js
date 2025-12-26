@@ -1035,8 +1035,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 showSuccess('OTP Verified Successfully!');
                 
                 // After a brief delay, show thank you message and then show the generator UI
+                // On first successful verification in this browser, also auto-open Schedule Settings
                 setTimeout(() => {
                     showThankYouMessage();
+                    
+                    try {
+                        const scheduleSeenKey = 'kmwp_schedule_seen';
+                        const alreadySeen = typeof localStorage !== 'undefined'
+                            ? localStorage.getItem(scheduleSeenKey) === 'true'
+                            : false;
+                        
+                        if (!alreadySeen && typeof openScheduleModal === 'function') {
+                            openScheduleModal();
+                            if (typeof localStorage !== 'undefined') {
+                                localStorage.setItem(scheduleSeenKey, 'true');
+                            }
+                        }
+                    } catch (e) {
+                        console.error('[KMWP] Failed to auto-open schedule modal after verification:', e);
+                    }
                 }, 1500);
                 
             } catch (err) {
@@ -1729,6 +1746,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 
                 showSuccess(message);
+
+                // After first successful save in this session, ensure View History button is visible
+                if (showHistoryBtn) {
+                    showHistoryBtn.style.display = 'inline-block';
+                }
             }, 1000);
             
         } catch (err) {
@@ -2555,6 +2577,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Show history button
     if (showHistoryBtn) {
+        // Hide by default until we confirm there is history
+        showHistoryBtn.style.display = 'none';
+
         showHistoryBtn.addEventListener('click', async () => {
             const historySection = document.getElementById('historySection');
             if (historySection) {
@@ -2631,6 +2656,34 @@ document.addEventListener('DOMContentLoaded', () => {
                 await loadHistory(true, currentHistoryPage + 1, currentFilters);
             }
         });
+    }
+
+    // Run initial history button visibility check on load
+    initializeHistoryButtonVisibility();
+    
+    // Initialize visibility of the View History button based on whether history exists
+    async function initializeHistoryButtonVisibility() {
+        if (!showHistoryBtn) return;
+        
+        try {
+            const response = await apiFetch('kmwp_has_history', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            
+            if (!response.ok) {
+                console.error('kmwp_has_history response not OK:', response.status);
+                showHistoryBtn.style.display = 'none';
+                return;
+            }
+            
+            const result = await response.json();
+            const hasHistory = result.success === true && result.data && result.data.has_history === true;
+            showHistoryBtn.style.display = hasHistory ? 'inline-block' : 'none';
+        } catch (err) {
+            console.error('Error checking history availability:', err);
+            showHistoryBtn.style.display = 'none';
+        }
     }
     
     

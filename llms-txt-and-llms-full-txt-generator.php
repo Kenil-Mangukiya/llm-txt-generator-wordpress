@@ -1149,6 +1149,39 @@ add_action('wp_ajax_kmwp_get_history', function () {
     ));
 });
 
+/* has_history - check if current user (or admin + cron) has any history rows */
+add_action('wp_ajax_kmwp_has_history', function () {
+    kmwp_verify_ajax();
+
+    global $wpdb;
+    $table_name = $wpdb->prefix . 'kmwp_file_history';
+    $user_id = get_current_user_id();
+
+    // If table doesn't exist, there is no history
+    if ($wpdb->get_var("SHOW TABLES LIKE '$table_name'") != $table_name) {
+        wp_send_json_success(array('has_history' => false));
+        return;
+    }
+
+    // Admin (user_id 1) sees both own entries (1) and cron entries (0)
+    if ($user_id === 1) {
+        $where = '(user_id = %d OR user_id = 0)';
+        $params = array($user_id);
+    } else {
+        $where = 'user_id = %d';
+        $params = array($user_id);
+    }
+
+    $count = (int) $wpdb->get_var(
+        $wpdb->prepare(
+            "SELECT COUNT(*) FROM $table_name WHERE $where",
+            $params
+        )
+    );
+
+    wp_send_json_success(array('has_history' => $count > 0));
+});
+
 /* get_history_item */
 add_action('wp_ajax_kmwp_get_history_item', function () {
     kmwp_verify_ajax();
