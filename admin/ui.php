@@ -229,8 +229,45 @@
             <div id="historyLoader" class="history-loader" style="display: none;">
                 <div class="history-spinner"></div>
             </div>
+            <!-- Filter Controls -->
+            <div class="history-filters">
+                <div class="filter-group">
+                    <label for="filterOutputType" class="filter-label">Output Type</label>
+                    <select id="filterOutputType" class="filter-select">
+                        <option value="all">All Types</option>
+                        <option value="llms_txt">Summarized (llm.txt)</option>
+                        <option value="llms_full_txt">Full (llm-full.txt)</option>
+                        <option value="llms_both">Both (llm.txt & llm-full.txt)</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label for="filterDateRange" class="filter-label">Date Range</label>
+                    <select id="filterDateRange" class="filter-select">
+                        <option value="all">All Time</option>
+                        <option value="today">Today</option>
+                        <option value="7days">Last 7 Days</option>
+                        <option value="30days">Last 30 Days</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label for="filterSource" class="filter-label">Source</label>
+                    <select id="filterSource" class="filter-select">
+                        <option value="all">All Sources</option>
+                        <option value="auto">Auto</option>
+                        <option value="manual">Manual</option>
+                    </select>
+                </div>
+            </div>
             <div id="historyList" class="history-list">
                 <!-- History items will be loaded here -->
+            </div>
+            <!-- Pagination Controls -->
+            <div id="historyPagination" class="history-pagination" style="display: none;">
+                <button id="historyPrevBtn" class="btn-pagination prev" disabled>Previous</button>
+                <div class="pagination-info">
+                    <span id="paginationText">Page 1 of 1</span>
+                </div>
+                <button id="historyNextBtn" class="btn-pagination next">Next</button>
             </div>
         </section>
         
@@ -368,18 +405,29 @@
     
     <!-- History View Modal -->
     <div role="dialog" aria-modal="true" class="fade custom-modal modal" id="historyViewModal" tabindex="-1">
-        <div class="modal-dialog modal-dialog-centered history-view-modal">
+        <div class="modal-dialog modal-dialog-centered history-view-modal output-preview-modal">
             <div class="modal-content">
                 <div class="modal-header">
                     <h4 class="modal-title" id="historyViewTitle">View File Content</h4>
                     <button type="button" class="btn-close" aria-label="Close" id="historyViewCloseBtn">×</button>
                 </div>
+                <!-- Tabs for both files -->
+                <div class="modal-tabs" id="historyModalTabs" style="display: none;">
+                    <button class="tab-btn active" id="history-tab-llms-txt" data-tab="llms_txt">LLM Txt</button>
+                    <button class="tab-btn" id="history-tab-llms-full-txt" data-tab="llms_full_txt">LLM Full Txt</button>
+                </div>
                 <div class="modal-body history-view-body">
-                    <div class="history-view-info">
-                        <div class="history-view-url" id="historyViewUrl"></div>
+                    <!-- LLM Txt content -->
+                    <div id="history-tab-content-llms_txt" class="tab-content active">
+                        <div class="iframe-container">
+                            <iframe id="historyViewIframe" src="about:blank"></iframe>
+                        </div>
                     </div>
-                    <div class="history-view-content">
-                        <iframe id="historyViewIframe" src="about:blank"></iframe>
+                    <!-- LLM Full Txt content -->
+                    <div id="history-tab-content-llms_full_txt" class="tab-content" style="display: none;">
+                        <div class="iframe-container">
+                            <iframe id="historyViewIframeFullTxt" src="about:blank"></iframe>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">

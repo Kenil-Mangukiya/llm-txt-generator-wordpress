@@ -551,34 +551,72 @@ document.addEventListener('DOMContentLoaded', () => {
         // Calculate file sizes
         let stats = [];
         
+        // Debug logging to see what content we have
+        console.log('[DEBUG displaySuccessCard] selectedOutputType:', selectedOutputType);
+        console.log('[DEBUG displaySuccessCard] currentSummarizedContent length:', currentSummarizedContent?.length || 0);
+        console.log('[DEBUG displaySuccessCard] currentFullContent length:', currentFullContent?.length || 0);
+        console.log('[DEBUG displaySuccessCard] currentSummarizedContent exists:', !!currentSummarizedContent);
+        console.log('[DEBUG displaySuccessCard] currentFullContent exists:', !!currentFullContent);
+        if (currentSummarizedContent) {
+            console.log('[DEBUG displaySuccessCard] currentSummarizedContent preview (first 100 chars):', currentSummarizedContent.substring(0, 100));
+        }
+        if (currentFullContent) {
+            console.log('[DEBUG displaySuccessCard] currentFullContent preview (first 100 chars):', currentFullContent.substring(0, 100));
+        }
+        
         if (selectedOutputType === 'llms_both') {
             // For both, show sizes only if content exists and is not empty
-            if (currentSummarizedContent && currentSummarizedContent.trim().length > 0) {
-                const summSize = Math.round(new Blob([currentSummarizedContent]).size / 1024);
+            // Check if content exists and has actual data (not just whitespace)
+            const hasSummarized = currentSummarizedContent && 
+                                  typeof currentSummarizedContent === 'string' && 
+                                  currentSummarizedContent.trim().length > 0;
+            const hasFull = currentFullContent && 
+                            typeof currentFullContent === 'string' && 
+                            currentFullContent.trim().length > 0;
+            
+            console.log('[DEBUG displaySuccessCard] hasSummarized:', hasSummarized, 'hasFull:', hasFull);
+            
+            if (hasSummarized) {
+                const summSize = Math.max(1, Math.round(new Blob([currentSummarizedContent]).size / 1024));
                 stats.push(`<strong>llm.txt:</strong> ${summSize}KB`);
+                console.log('[DEBUG displaySuccessCard] llm.txt size calculated:', summSize, 'KB');
             }
-            if (currentFullContent && currentFullContent.trim().length > 0) {
-                const fullSize = Math.round(new Blob([currentFullContent]).size / 1024);
+            if (hasFull) {
+                const fullSize = Math.max(1, Math.round(new Blob([currentFullContent]).size / 1024));
                 stats.push(`<strong>llm-full.txt:</strong> ${fullSize}KB`);
+                console.log('[DEBUG displaySuccessCard] llm-full.txt size calculated:', fullSize, 'KB');
             }
         } else if (selectedOutputType === 'llms_txt') {
-            if (currentSummarizedContent && currentSummarizedContent.trim().length > 0) {
-                const size = Math.round(new Blob([currentSummarizedContent]).size / 1024);
+            const hasContent = currentSummarizedContent && 
+                               typeof currentSummarizedContent === 'string' && 
+                               currentSummarizedContent.trim().length > 0;
+            if (hasContent) {
+                const size = Math.max(1, Math.round(new Blob([currentSummarizedContent]).size / 1024));
                 stats.push(`<strong>llm.txt:</strong> ${size}KB`);
             }
         } else if (selectedOutputType === 'llms_full_txt') {
-            if (currentFullContent && currentFullContent.trim().length > 0) {
-                const size = Math.round(new Blob([currentFullContent]).size / 1024);
+            const hasContent = currentFullContent && 
+                               typeof currentFullContent === 'string' && 
+                               currentFullContent.trim().length > 0;
+            if (hasContent) {
+                const size = Math.max(1, Math.round(new Blob([currentFullContent]).size / 1024));
                 stats.push(`<strong>llm-full.txt:</strong> ${size}KB`);
             }
-        } else if (currentOutputContent && currentOutputContent.trim().length > 0) {
-            const size = Math.round(new Blob([currentOutputContent]).size / 1024);
+        } else if (currentOutputContent && typeof currentOutputContent === 'string' && currentOutputContent.trim().length > 0) {
+            const size = Math.max(1, Math.round(new Blob([currentOutputContent]).size / 1024));
             stats.push(`<strong>Total:</strong> ${size}KB`);
         }
+        
+        console.log('[DEBUG displaySuccessCard] stats array length:', stats.length);
+        console.log('[DEBUG displaySuccessCard] stats:', stats);
         
         if (stats.length > 0) {
             successFileStats.innerHTML = stats.join(' + ');
             successCard.style.display = 'block';
+        } else {
+            // Hide success card if no valid content/stats
+            successCard.style.display = 'none';
+            console.log('[DEBUG displaySuccessCard] No stats found, hiding success card');
         }
     }
 
@@ -1242,6 +1280,16 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // CLEAR PREVIOUS CONTENT BASED ON OUTPUT TYPE
         // This prevents old content from showing when generating a different type
+        // Also hide success card from previous generation
+        if (successCard) {
+            successCard.style.display = 'none';
+        }
+        // Also hide output preview modal if it's open
+        if (outputPreviewModal) {
+            outputPreviewModal.classList.remove('show');
+            outputPreviewModal.style.display = 'none';
+        }
+        
         if (outputType === 'llms_txt') {
             // Only need summarized, clear full content
             currentFullContent = '';
@@ -1323,12 +1371,21 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // Store content based on result
+            // Debug logging to see what we received from API
+            console.log('[DEBUG generateFiles] result keys:', Object.keys(result));
+            console.log('[DEBUG generateFiles] result.llms_text exists:', !!result.llms_text, 'length:', result.llms_text?.length || 0);
+            console.log('[DEBUG generateFiles] result.llms_full_text exists:', !!result.llms_full_text, 'length:', result.llms_full_text?.length || 0);
+            console.log('[DEBUG generateFiles] outputType:', outputType);
+            console.log('[DEBUG generateFiles] result.is_zip_mode:', result.is_zip_mode);
+            
             if (result.is_zip_mode) {
                 const bytes = new Uint8Array(result.zip_data.match(/.{1,2}/g).map(b => parseInt(b, 16)));
                 storedZipBlob = new Blob([bytes], { type: 'application/zip' });
                 // Store both separately
                 currentSummarizedContent = result.llms_text || '';
                 currentFullContent = result.llms_full_text || '';
+                console.log('[DEBUG generateFiles] After zip mode - currentSummarizedContent length:', currentSummarizedContent.length);
+                console.log('[DEBUG generateFiles] After zip mode - currentFullContent length:', currentFullContent.length);
                 const combinedText = currentSummarizedContent + '\n\n' + currentFullContent;
                 if (showOutput) {
                     displayContent(combinedText);
@@ -1340,15 +1397,25 @@ document.addEventListener('DOMContentLoaded', () => {
                     currentOutputContent = currentSummarizedContent;
                     // Clear full content since we're only generating txt
                     currentFullContent = '';
+                    console.log('[DEBUG generateFiles] llms_txt - currentSummarizedContent length:', currentSummarizedContent.length);
                 } else if (outputType === 'llms_full_txt') {
                     currentFullContent = result.llms_full_text || '';
                     currentOutputContent = currentFullContent;
                     // Clear summarized content since we're only generating full txt
                     currentSummarizedContent = '';
+                    console.log('[DEBUG generateFiles] llms_full_txt - currentFullContent length:', currentFullContent.length);
                 } else {
                     // For both, store separately
                     currentSummarizedContent = result.llms_text || '';
                     currentFullContent = result.llms_full_text || '';
+                    console.log('[DEBUG generateFiles] llms_both - currentSummarizedContent length:', currentSummarizedContent.length);
+                    console.log('[DEBUG generateFiles] llms_both - currentFullContent length:', currentFullContent.length);
+                    if (currentSummarizedContent) {
+                        console.log('[DEBUG generateFiles] llms_both - currentSummarizedContent preview (first 200 chars):', currentSummarizedContent.substring(0, 200));
+                    }
+                    if (currentFullContent) {
+                        console.log('[DEBUG generateFiles] llms_both - currentFullContent preview (first 200 chars):', currentFullContent.substring(0, 200));
+                    }
                     currentOutputContent = currentSummarizedContent + '\n\n' + currentFullContent;
                 }
                 if (showOutput) {
@@ -1861,7 +1928,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
             
-            // Populate full txt iframe
+            // Populate BOTH iframes with correct content
+            // First iframe (LLM Txt) - summarized content
+            if (outputIframe) {
+                const iframeDoc = outputIframe.contentDocument || outputIframe.contentWindow.document;
+                iframeDoc.open();
+                iframeDoc.write('<html><body style="white-space:pre-wrap;font-family:monospace">' + 
+                    currentSummarizedContent.trim().replace(/</g, '&lt;') + 
+                    '</body></html>');
+                iframeDoc.close();
+            }
+            
+            // Second iframe (LLM Full Txt) - full content
             if (outputIframeFullTxt) {
                 const iframeDoc = outputIframeFullTxt.contentDocument || outputIframeFullTxt.contentWindow.document;
                 iframeDoc.open();
@@ -1910,15 +1988,56 @@ document.addEventListener('DOMContentLoaded', () => {
                 content.style.display = 'block';
                 content.classList.add('active');
             });
+            
+            // For single file types, populate the correct iframe
+            if (selectedOutputType === 'llms_txt' && currentSummarizedContent) {
+                // Populate first iframe with summarized content
+                if (outputIframe) {
+                    const iframeDoc = outputIframe.contentDocument || outputIframe.contentWindow.document;
+                    iframeDoc.open();
+                    iframeDoc.write('<html><body style="white-space:pre-wrap;font-family:monospace">' + 
+                        currentSummarizedContent.trim().replace(/</g, '&lt;') + 
+                        '</body></html>');
+                    iframeDoc.close();
+                }
+            } else if (selectedOutputType === 'llms_full_txt' && currentFullContent) {
+                // Populate first iframe with full content
+                if (outputIframe) {
+                    const iframeDoc = outputIframe.contentDocument || outputIframe.contentWindow.document;
+                    iframeDoc.open();
+                    iframeDoc.write('<html><body style="white-space:pre-wrap;font-family:monospace">' + 
+                        currentFullContent.trim().replace(/</g, '&lt;') + 
+                        '</body></html>');
+                    iframeDoc.close();
+                }
+            }
         }
     }
 
     /* ------------------------
        History Functions
     -------------------------*/
-    async function loadHistory(showLoader = false) {
+    // Pagination state
+    let currentHistoryPage = 1;
+    let totalHistoryPages = 1;
+    let lastCronRunTimestamp = null;
+    
+    // Filter state
+    let currentFilters = {
+        output_type: 'all',
+        date_range: 'all',
+        source: 'all'
+    };
+    
+    async function loadHistory(showLoader = false, page = 1, filters = null) {
         const historyLoader = document.getElementById('historyLoader');
         const historyList = document.getElementById('historyList');
+        
+        // Update current page
+        currentHistoryPage = page;
+        
+        // Use provided filters or current filters
+        const activeFilters = filters || currentFilters;
         
         // Show loader
         if (historyLoader) {
@@ -1929,7 +2048,21 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         try {
-            const response = await apiFetch('kmwp_get_history');
+            // Build query params object
+            const queryParams = { page: page };
+            
+            // Add filter parameters only if not 'all'
+            if (activeFilters.output_type !== 'all') {
+                queryParams.filter_output_type = activeFilters.output_type;
+            }
+            if (activeFilters.date_range !== 'all') {
+                queryParams.filter_date_range = activeFilters.date_range;
+            }
+            // Note: source filter is applied on frontend after getting data
+            
+            const response = await apiFetch('kmwp_get_history', {
+                queryParams: queryParams
+            });
             if (!response.ok) {
                 const errorText = await response.text();
                 console.error('History response error:', response.status, errorText);
@@ -1944,7 +2077,41 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(result.data?.message || 'Failed to load history');
             }
             
-            displayHistory(result.data || []);
+            // Extract pagination info and history data
+            const historyData = result.data || {};
+            let history = historyData.history || [];
+            totalHistoryPages = historyData.total_pages || 1;
+            lastCronRunTimestamp = historyData.last_cron_run || null;
+            
+            // Apply source filter on frontend (since it requires timestamp comparison)
+            if (activeFilters.source !== 'all' && lastCronRunTimestamp) {
+                history = history.filter(item => {
+                    if (!item.created_at) return false;
+                    
+                    try {
+                        const entryTime = new Date(item.created_at).getTime();
+                        const cronTime = new Date(lastCronRunTimestamp).getTime();
+                        if (!isNaN(entryTime) && !isNaN(cronTime)) {
+                            const timeDiff = Math.abs(entryTime - cronTime);
+                            const isCronEntry = timeDiff <= 10000; // 10 seconds tolerance
+                            
+                            if (activeFilters.source === 'auto') {
+                                return isCronEntry;
+                            } else if (activeFilters.source === 'manual') {
+                                return !isCronEntry;
+                            }
+                        }
+                    } catch (e) {
+                        // If date parsing fails, treat as manual
+                        return activeFilters.source === 'manual';
+                    }
+                    
+                    return true;
+                });
+            }
+            
+            displayHistory(history, historyData);
+            updatePaginationControls(historyData);
             return Promise.resolve();
         } catch (err) {
             console.error('Error loading history:', err);
@@ -1961,7 +2128,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function displayHistory(history) {
+    function displayHistory(history, paginationData = {}) {
         const historyList = document.getElementById('historyList');
         const historySection = document.getElementById('historySection');
         
@@ -1977,26 +2144,48 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
+        // Get last cron run timestamp for comparison
+        const lastCronRun = paginationData.last_cron_run || lastCronRunTimestamp;
+        
         historyList.innerHTML = history.map(item => {
             const date = new Date(item.created_at).toLocaleString();
             const fileType = item.output_type === 'llms_both' ? 'Both' : 
                             item.output_type === 'llms_full_txt' ? 'Full' : 'Summarized';
             
+            // Determine if this entry was created by cron
+            // Compare entry timestamp with last cron run timestamp (within 10 seconds tolerance)
+            let isCronEntry = false;
+            if (lastCronRun && item.created_at) {
+                try {
+                    const entryTime = new Date(item.created_at).getTime();
+                    const cronTime = new Date(lastCronRun).getTime();
+                    if (!isNaN(entryTime) && !isNaN(cronTime)) {
+                        const timeDiff = Math.abs(entryTime - cronTime);
+                        // 10 seconds tolerance to account for processing time
+                        isCronEntry = timeDiff <= 10000;
+                    }
+                } catch (e) {
+                    // If date parsing fails, default to manual
+                    isCronEntry = false;
+                }
+            }
+            
             // Determine filename(s) from file_path or default based on output type
             let filename = '';
-            let hasBackup = false;
             if (item.file_path) {
                 // Extract filenames from file_path (handles both single and multiple files)
                 const paths = item.file_path.split(', ');
                 const filenameParts = paths.map(path => {
                     const name = path.trim();
-                    // Extract just the filename (handle backup files)
+                    // Extract just the filename
                     const parts = name.split(/[/\\]/);
-                    const extractedName = parts[parts.length - 1];
-                    // Check if it's a backup file
+                    let extractedName = parts[parts.length - 1];
+                    
+                    // Remove backup suffix if present (for backward compatibility with old entries)
                     if (extractedName.includes('.backup.')) {
-                        hasBackup = true;
+                        extractedName = extractedName.split('.backup.')[0];
                     }
+                    
                     return extractedName;
                 });
                 filename = filenameParts.join(', ');
@@ -2011,24 +2200,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
             
-            // Format filename display - add icon if any file is a backup
-            const filenameDisplay = hasBackup 
-                ? `<span class="backup-icon">📦</span> ${escapeHtml(filename)}`
-                : escapeHtml(filename);
+            // Create source badge (Cron or Manual)
+            const sourceBadge = isCronEntry 
+                ? '<span class="history-source-badge cron-badge" title="Auto-generated by cron">🔄 Auto</span>'
+                : '<span class="history-source-badge manual-badge" title="Manually saved">✋ Manual</span>';
             
             return `
                 <div class="history-item">
                     <div class="history-info">
                         <div class="history-url">${escapeHtml(item.website_url)}</div>
-                        <div class="history-filename" title="${escapeHtml(filename)}">${filenameDisplay}</div>
+                        <div class="history-filename" title="${escapeHtml(filename)}">${escapeHtml(filename)}</div>
                         <div class="history-meta">
                             <span class="history-type">${fileType}</span>
+                            ${sourceBadge}
                             <span class="history-date">${date}</span>
                         </div>
                     </div>
                     <div class="history-actions">
                         <button class="btn-view" data-id="${item.id}">View</button>
-                        <button class="btn-download-history" data-id="${item.id}" data-type="${item.output_type}">Download</button>
                         <button class="btn-delete-history" data-id="${item.id}" data-type="${item.output_type}">Delete</button>
                     </div>
                 </div>
@@ -2053,16 +2242,48 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('History displayed, section visible:', historySection.style.display);
     }
     
+    function updatePaginationControls(paginationData) {
+        const paginationContainer = document.getElementById('historyPagination');
+        const prevBtn = document.getElementById('historyPrevBtn');
+        const nextBtn = document.getElementById('historyNextBtn');
+        const paginationText = document.getElementById('paginationText');
+        
+        if (!paginationContainer) return;
+        
+        const currentPage = paginationData.page || 1;
+        const totalPages = paginationData.total_pages || 1;
+        
+        // Show pagination if there's more than one page
+        if (totalPages > 1) {
+            paginationContainer.style.display = 'flex';
+        } else {
+            paginationContainer.style.display = 'none';
+        }
+        
+        // Update pagination text
+        if (paginationText) {
+            paginationText.textContent = `Page ${currentPage} of ${totalPages}`;
+        }
+        
+        // Update Previous button
+        if (prevBtn) {
+            prevBtn.disabled = currentPage <= 1;
+        }
+        
+        // Update Next button
+        if (nextBtn) {
+            nextBtn.disabled = currentPage >= totalPages;
+        }
+    }
+    
     // Event handler for history actions (event delegation)
     function handleHistoryClick(e) {
-        const target = e.target.closest('.btn-view, .btn-download-history, .btn-delete-history');
+        const target = e.target.closest('.btn-view, .btn-delete-history');
         if (!target) return;
         
         const id = target.dataset.id;
         if (target.classList.contains('btn-view')) {
             viewHistoryItem(id);
-        } else if (target.classList.contains('btn-download-history')) {
-            downloadHistoryItem(id, target.dataset.type);
         } else if (target.classList.contains('btn-delete-history')) {
             deleteHistoryItem(id);
         }
@@ -2101,170 +2322,108 @@ document.addEventListener('DOMContentLoaded', () => {
             const result = await response.json();
             const item = result.data;
             
-            // Get content and format with titles for "Both" type
-            let content = '';
-            if (item.output_type === 'llms_both') {
-                // Extract domain from URL for title
-                const urlObj = new URL(item.website_url);
-                const domain = urlObj.hostname.replace('www.', '');
-                
-                // Get content and remove existing titles if present
-                let summarized = (item.summarized_content || '').trim();
-                let full = (item.full_content || '').trim();
-                
-                // Escape domain for regex
-                const escapedDomain = domain.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                
-                // Remove ALL existing title variations from summarized content (anywhere in content, not just start)
-                // Match: "# domain llm.txt", "# domain llms.txt", etc.
-                const summarizedTitlePatterns = [
-                    new RegExp(`#\\s*${escapedDomain}\\s+llm[s]?\\.txt\\s*\\n?`, 'gi'),
-                    new RegExp(`#\\s*${escapedDomain}\\s+llm\\.txt\\s*\\n?`, 'gi'),
-                    new RegExp(`#\\s*${escapedDomain}\\s+llms\\.txt\\s*\\n?`, 'gi')
-                ];
-                summarizedTitlePatterns.forEach(pattern => {
-                    summarized = summarized.replace(pattern, '').trim();
-                });
-                
-                // Remove ALL existing title variations from full content (anywhere in content, not just start)
-                // Match: "# domain llm-full.txt", "# domain llms-full.txt", "# domain llm-full.txt", etc.
-                // Remove ALL occurrences, not just the first one
-                const fullTitlePatterns = [
-                    new RegExp(`#\\s*${escapedDomain}\\s+llm[s-]?full\\.txt\\s*\\n?`, 'gi'),
-                    new RegExp(`#\\s*${escapedDomain}\\s+llm-full\\.txt\\s*\\n?`, 'gi'),
-                    new RegExp(`#\\s*${escapedDomain}\\s+llms-full\\.txt\\s*\\n?`, 'gi'),
-                    new RegExp(`#\\s*${escapedDomain}\\s+llm[s]?full\\.txt\\s*\\n?`, 'gi')
-                ];
-                fullTitlePatterns.forEach(pattern => {
-                    // Replace all occurrences (global flag 'g' handles this)
-                    full = full.replace(pattern, '').trim();
-                });
-                
-                // Additional cleanup: remove any remaining title-like patterns
-                // This catches any variations we might have missed
-                full = full.replace(new RegExp(`^#\\s*${escapedDomain}\\s+.*?full.*?\\s*\\n?`, 'gi'), '').trim();
-                
-                // Format with titles (only add if not already present)
-                content = `# ${domain} llm.txt\n\n${summarized}\n\n\n# ${domain} llm-full.txt\n\n${full}`;
-            } else if (item.output_type === 'llms_txt') {
-                content = item.summarized_content || '';
-            } else {
-                content = item.full_content || '';
-            }
-            
-            // Clean content (remove leading spaces)
-            let cleanedContent = content.trim();
-            const lines = cleanedContent.split('\n');
-            if (lines.length > 0 && lines[0]) {
-                lines[0] = lines[0].replace(/^\s+/, '');
-            }
-            cleanedContent = lines.join('\n');
-            
-            // Update modal content
+            // Update modal title (keep as "View File Content")
             const historyViewTitle = document.getElementById('historyViewTitle');
-            const historyViewUrl = document.getElementById('historyViewUrl');
-            const historyViewIframe = document.getElementById('historyViewIframe');
-            
             if (historyViewTitle) historyViewTitle.textContent = 'View File Content';
-            if (historyViewUrl) historyViewUrl.textContent = item.website_url;
             
-            // Display content in iframe with improved formatting
-            if (historyViewIframe) {
-                const iframeDoc = historyViewIframe.contentDocument || historyViewIframe.contentWindow.document;
-                iframeDoc.open();
+            // Get modal elements
+            const historyModalTabs = document.getElementById('historyModalTabs');
+            const historyViewIframe = document.getElementById('historyViewIframe');
+            const historyViewIframeFullTxt = document.getElementById('historyViewIframeFullTxt');
+            
+            // Get raw content
+            const summarizedContent = (item.summarized_content || '').trim();
+            const fullContent = (item.full_content || '').trim();
+            
+            // Handle "both" type - show tabs like output preview modal
+            if (item.output_type === 'llms_both' && summarizedContent && fullContent) {
+                // Show tabs
+                if (historyModalTabs) {
+                    historyModalTabs.style.display = 'flex';
+                }
                 
-                // Escape HTML and format content properly
-                const escapedContent = cleanedContent
-                    .replace(/&/g, '&amp;')
-                    .replace(/</g, '&lt;')
-                    .replace(/>/g, '&gt;')
-                    .replace(/\n/g, '<br>');
+                // Show first tab content, hide second
+                const tabContent1 = document.getElementById('history-tab-content-llms_txt');
+                const tabContent2 = document.getElementById('history-tab-content-llms_full_txt');
+                if (tabContent1) {
+                    tabContent1.classList.add('active');
+                    tabContent1.style.display = 'block';
+                }
+                if (tabContent2) {
+                    tabContent2.classList.remove('active');
+                    tabContent2.style.display = 'none';
+                }
                 
-                // Create styled HTML with better formatting
-                const htmlContent = `
-                    <!DOCTYPE html>
-                    <html>
-                    <head>
-                        <meta charset="UTF-8">
-                        <style>
-                            body {
-                                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                                font-size: 14px;
-                                line-height: 1.6;
-                                color: #333;
-                                padding: 20px;
-                                padding-top: 20px;
-                                padding-bottom: 30px;
-                                margin: 0;
-                                background: #fff;
-                                white-space: pre-wrap;
-                                word-wrap: break-word;
-                            }
-                            h1, h2, h3, h4, h5, h6 {
-                                color: #5B41FA;
-                                margin-top: 20px;
-                                margin-bottom: 12px;
-                                font-weight: 600;
-                            }
-                            h1 {
-                                font-size: 24px;
-                                border-bottom: 2px solid #5B41FA;
-                                padding-bottom: 8px;
-                            }
-                            h2 {
-                                font-size: 20px;
-                                border-bottom: 1px solid #e2e8f0;
-                                padding-bottom: 6px;
-                            }
-                            h3 {
-                                font-size: 18px;
-                            }
-                            code {
-                                background: #f1f5f9;
-                                padding: 2px 6px;
-                                border-radius: 3px;
-                                font-family: 'Courier New', monospace;
-                                font-size: 13px;
-                            }
-                            pre {
-                                background: #f8f9fa;
-                                border: 1px solid #e2e8f0;
-                                border-radius: 6px;
-                                padding: 15px;
-                                overflow-x: auto;
-                                margin: 15px 0;
-                            }
-                            a {
-                                color: #5B41FA;
-                                text-decoration: none;
-                            }
-                            a:hover {
-                                text-decoration: underline;
-                            }
-                            ul, ol {
-                                margin: 10px 0;
-                                padding-left: 25px;
-                            }
-                            li {
-                                margin: 5px 0;
-                            }
-                            strong {
-                                font-weight: 600;
-                                color: #1e293b;
-                            }
-                            hr {
-                                border: none;
-                                border-top: 1px solid #e2e8f0;
-                                margin: 20px 0;
-                            }
-                        </style>
-                    </head>
-                    <body>${escapedContent}</body>
-                    </html>
-                `;
+                // Set first tab as active
+                const tabBtn1 = document.getElementById('history-tab-llms-txt');
+                const tabBtn2 = document.getElementById('history-tab-llms-full-txt');
+                if (tabBtn1) tabBtn1.classList.add('active');
+                if (tabBtn2) tabBtn2.classList.remove('active');
                 
-                iframeDoc.write(htmlContent);
-                iframeDoc.close();
+                // Populate both iframes with content (same format as output preview modal)
+                if (historyViewIframe) {
+                    const iframeDoc = historyViewIframe.contentDocument || historyViewIframe.contentWindow.document;
+                    iframeDoc.open();
+                    iframeDoc.write('<html><body style="white-space:pre-wrap;font-family:monospace">' + 
+                        summarizedContent.replace(/</g, '&lt;') + 
+                        '</body></html>');
+                    iframeDoc.close();
+                }
+                
+                if (historyViewIframeFullTxt) {
+                    const iframeDoc = historyViewIframeFullTxt.contentDocument || historyViewIframeFullTxt.contentWindow.document;
+                    iframeDoc.open();
+                    iframeDoc.write('<html><body style="white-space:pre-wrap;font-family:monospace">' + 
+                        fullContent.replace(/</g, '&lt;') + 
+                        '</body></html>');
+                    iframeDoc.close();
+                }
+                
+                // Setup tab click handlers
+                setupHistoryTabsHandler();
+            } else {
+                // Hide tabs for single file types
+                if (historyModalTabs) {
+                    historyModalTabs.style.display = 'none';
+                }
+                
+                // Show first tab content, hide second
+                const tabContent1 = document.getElementById('history-tab-content-llms_txt');
+                const tabContent2 = document.getElementById('history-tab-content-llms_full_txt');
+                if (tabContent1) {
+                    tabContent1.classList.add('active');
+                    tabContent1.style.display = 'block';
+                }
+                if (tabContent2) {
+                    tabContent2.classList.remove('active');
+                    tabContent2.style.display = 'none';
+                }
+                
+                // Determine which content to show
+                let contentToShow = '';
+                if (item.output_type === 'llms_txt') {
+                    contentToShow = summarizedContent;
+                } else {
+                    contentToShow = fullContent;
+                }
+                
+                // Populate main iframe with content (same format as output preview modal)
+                if (historyViewIframe) {
+                    const iframeDoc = historyViewIframe.contentDocument || historyViewIframe.contentWindow.document;
+                    iframeDoc.open();
+                    iframeDoc.write('<html><body style="white-space:pre-wrap;font-family:monospace">' + 
+                        contentToShow.replace(/</g, '&lt;') + 
+                        '</body></html>');
+                    iframeDoc.close();
+                }
+                
+                // Clear full txt iframe
+                if (historyViewIframeFullTxt) {
+                    const iframeDoc = historyViewIframeFullTxt.contentDocument || historyViewIframeFullTxt.contentWindow.document;
+                    iframeDoc.open();
+                    iframeDoc.write('');
+                    iframeDoc.close();
+                }
             }
             
             // Show modal
@@ -2298,78 +2457,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 historyViewModal.classList.remove('show');
             }
         });
-    }
-
-    async function downloadHistoryItem(id, outputType) {
-        // Find the button
-        const btn = document.querySelector(`.btn-download-history[data-id="${id}"]`);
-        const originalHTML = btn ? btn.innerHTML : 'Download';
-        const originalText = btn ? btn.textContent.trim() : 'Download';
-        if (btn) {
-            btn.disabled = true;
-        }
-        
-        try {
-            const response = await apiFetch('kmwp_get_history_item', {
-                queryParams: { id: id }
-            });
-            if (!response.ok) throw new Error('Failed to load history item');
-            
-            const result = await response.json();
-            const item = result.data;
-            
-            if (item.output_type === 'llms_both') {
-                // Create zip file with both files
-                if (typeof JSZip !== 'undefined') {
-                    const zip = new JSZip();
-                    zip.file('llm.txt', item.summarized_content || '');
-                    zip.file('llm-full.txt', item.full_content || '');
-                    
-                    const zipBlob = await zip.generateAsync({ type: 'blob' });
-                    const url = URL.createObjectURL(zipBlob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = 'llms-both.zip';
-                    a.click();
-                    URL.revokeObjectURL(url);
-                } else {
-                    // Fallback: download as single file
-                    const content = (item.summarized_content || '') + '\n\n' + (item.full_content || '');
-                    const blob = new Blob([content], { type: 'text/plain' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = 'llm-both.txt';
-                    a.click();
-                    URL.revokeObjectURL(url);
-                }
-            } else if (item.output_type === 'llms_txt') {
-                const blob = new Blob([item.summarized_content || ''], { type: 'text/plain' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'llm.txt';
-                a.click();
-                URL.revokeObjectURL(url);
-            } else {
-                const blob = new Blob([item.full_content || ''], { type: 'text/plain' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'llm-full.txt';
-                a.click();
-                URL.revokeObjectURL(url);
-            }
-            
-            showSuccess('File downloaded');
-        } catch (err) {
-            showError(err.message);
-        } finally {
-            // Always reset button
-            if (btn) {
-                btn.disabled = false;
-            }
-        }
     }
 
     async function deleteHistoryItem(id) {
@@ -2431,14 +2518,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (response.status === 404) {
                     console.log('Delete returned 404, checking if item still exists...');
                     // Refresh history - if item is gone, it was successfully deleted
-                    await loadHistory(false);
+                    await loadHistory(false, currentHistoryPage, currentFilters);
                     // Check if the item still exists
                     const itemStillExists = document.querySelector(`.btn-delete-history[data-id="${id}"]`);
                     if (!itemStillExists) {
                         // Item is gone, deletion was successful (handled by another request)
                         // Don't show message for duplicate requests
                         console.log('Item already deleted by another request, silently completing');
-                        await loadHistory(false);
+                        await loadHistory(false, currentHistoryPage, currentFilters);
                         return;
                     }
                 }
@@ -2453,7 +2540,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // If so, don't show it - the first request already handled it
             if (message === 'History item already deleted' || message.includes('already deleted')) {
                 console.log('Duplicate delete request detected, silently ignoring');
-                await loadHistory(false);
+                await loadHistory(false, currentHistoryPage, currentFilters);
                 return;
             }
             
@@ -2463,7 +2550,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 showSuccess(message);
             }
-            await loadHistory(false);
+            await loadHistory(false, currentHistoryPage, currentFilters);
         } catch (err) {
             console.error('Delete error:', err);
             showError(err.message);
@@ -2509,6 +2596,69 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+    
+    // Setup history tabs (similar to output preview tabs)
+    function setupHistoryTabsHandler() {
+        const tabButtons = document.querySelectorAll('#historyModalTabs .tab-btn');
+        const tabContents = document.querySelectorAll('#historyViewModal .tab-content');
+        
+        // Remove old listeners by cloning
+        tabButtons.forEach(btn => {
+            const newBtn = btn.cloneNode(true);
+            btn.parentNode.replaceChild(newBtn, btn);
+        });
+        
+        // Re-attach event listeners to new buttons
+        document.querySelectorAll('#historyModalTabs .tab-btn').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.preventDefault();
+                const tabId = this.getAttribute('data-tab');
+                
+                // Update active tab button
+                document.querySelectorAll('#historyModalTabs .tab-btn').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                
+                // Update visible content
+                tabContents.forEach(content => {
+                    content.classList.remove('active');
+                    content.style.display = 'none';
+                });
+                
+                const tabContent = document.getElementById('history-tab-content-' + tabId);
+                if (tabContent) {
+                    tabContent.classList.add('active');
+                    tabContent.style.display = 'block';
+                }
+            });
+        });
+    }
+    
+    // Filter elements
+    const filterOutputType = document.getElementById('filterOutputType');
+    const filterDateRange = document.getElementById('filterDateRange');
+    const filterSource = document.getElementById('filterSource');
+    
+    // Filter change handlers
+    if (filterOutputType) {
+        filterOutputType.addEventListener('change', () => {
+            currentFilters.output_type = filterOutputType.value;
+            loadHistory(true, 1, currentFilters);
+        });
+    }
+    
+    if (filterDateRange) {
+        filterDateRange.addEventListener('change', () => {
+            currentFilters.date_range = filterDateRange.value;
+            loadHistory(true, 1, currentFilters);
+        });
+    }
+    
+    if (filterSource) {
+        filterSource.addEventListener('change', () => {
+            currentFilters.source = filterSource.value;
+            loadHistory(true, 1, currentFilters);
+        });
+    }
 
     // Show history button
     if (showHistoryBtn) {
@@ -2516,8 +2666,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const historySection = document.getElementById('historySection');
             if (historySection) {
                 historySection.style.display = 'block';
-                // Load history when section is shown
-                await loadHistory(false);
+                // Load history when section is shown (always start at page 1)
+                await loadHistory(false, 1, currentFilters);
             }
         });
     }
@@ -2540,7 +2690,8 @@ document.addEventListener('DOMContentLoaded', () => {
             refreshHistoryBtn.disabled = true;
             
             try {
-                await loadHistory(false);
+                // Reload current page with current filters
+                await loadHistory(false, currentHistoryPage, currentFilters);
             } catch (err) {
                 console.error('Error refreshing history:', err);
             } finally {
@@ -2548,6 +2699,26 @@ document.addEventListener('DOMContentLoaded', () => {
                 setTimeout(() => {
                     refreshHistoryBtn.disabled = false;
                 }, 0);
+            }
+        });
+    }
+    
+    // Pagination button handlers
+    const historyPrevBtn = document.getElementById('historyPrevBtn');
+    const historyNextBtn = document.getElementById('historyNextBtn');
+    
+    if (historyPrevBtn) {
+        historyPrevBtn.addEventListener('click', async () => {
+            if (currentHistoryPage > 1) {
+                await loadHistory(true, currentHistoryPage - 1, currentFilters);
+            }
+        });
+    }
+    
+    if (historyNextBtn) {
+        historyNextBtn.addEventListener('click', async () => {
+            if (currentHistoryPage < totalHistoryPages) {
+                await loadHistory(true, currentHistoryPage + 1, currentFilters);
             }
         });
     }

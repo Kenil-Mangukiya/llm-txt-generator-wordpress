@@ -735,6 +735,10 @@ add_action('wp_ajax_kmwp_save_to_root', function () {
         if (!empty($summarized_content)) {
             $file_path_summary = ABSPATH . 'llm.txt';
             
+            // BACKUP CREATION DISABLED - Code kept for future use
+            // Backup creation is disabled to avoid disk space accumulation from frequent cron runs
+            // All backup-related functions remain intact below for potential future re-enabling
+            /*
             // Create backup ONLY if file existed BEFORE this request, user confirmed, and we haven't backed it up yet
             // This prevents backing up files that were just created in a previous duplicate request
             if ($file_existed_before['llm.txt'] && $confirm_overwrite && !in_array($file_path_summary, $files_backed_up)) {
@@ -747,6 +751,7 @@ add_action('wp_ajax_kmwp_save_to_root', function () {
                     kmwp_update_history_with_backup($file_path_summary, $backup);
                 }
             }
+            */
             
             /*
              * Direct root write is intentional.
@@ -774,6 +779,8 @@ add_action('wp_ajax_kmwp_save_to_root', function () {
         if (!empty($full_content)) {
             $file_path_full = ABSPATH . 'llm-full.txt';
             
+            // BACKUP CREATION DISABLED - Code kept for future use
+            /*
             // Create backup ONLY if file existed BEFORE this request, user confirmed, and we haven't backed it up yet
             // This prevents backing up files that were just created in a previous duplicate request
             if ($file_existed_before['llm-full.txt'] && $confirm_overwrite && !in_array($file_path_full, $files_backed_up)) {
@@ -785,6 +792,7 @@ add_action('wp_ajax_kmwp_save_to_root', function () {
                     kmwp_update_history_with_backup($file_path_full, $backup);
                 }
             }
+            */
             
             /*
              * Direct root write is intentional.
@@ -884,9 +892,10 @@ add_action('wp_ajax_kmwp_save_to_root', function () {
     // Get WordPress root directory (ABSPATH)
     $file_path = ABSPATH . $filename;
     
-    // Create backup if file exists and user confirmed
+    // BACKUP CREATION DISABLED - Code kept for future use
     $backup_created = null;
     
+    /*
     // Create backup ONLY if file existed BEFORE this request and user confirmed
     // This prevents backing up files that were just created in a previous duplicate request
     if ($file_existed_before[$filename] && $confirm_overwrite) {
@@ -896,6 +905,7 @@ add_action('wp_ajax_kmwp_save_to_root', function () {
             kmwp_update_history_with_backup($file_path, $backup_created);
         }
     }
+    */
     
     /*
      * Direct root write is intentional.
@@ -1018,21 +1028,84 @@ add_action('wp_ajax_kmwp_get_history', function () {
     
     // Check if table exists
     if ($wpdb->get_var("SHOW TABLES LIKE '$table_name'") != $table_name) {
-        wp_send_json_success([]); // Return empty array if table doesn't exist
+        wp_send_json_success(array(
+            'history' => array(),
+            'total' => 0,
+            'page' => 1,
+            'per_page' => 5,
+            'total_pages' => 0,
+            'last_cron_run' => null
+        ));
         return;
     }
     
+    // Get pagination parameters
+    $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
+    $per_page = 5;
+    $offset = ($page - 1) * $per_page;
+    
+    // Get filter parameters
+    $filter_output_type = isset($_GET['filter_output_type']) ? sanitize_text_field($_GET['filter_output_type']) : 'all';
+    $filter_date_range = isset($_GET['filter_date_range']) ? sanitize_text_field($_GET['filter_date_range']) : 'all';
+    $filter_source = isset($_GET['filter_source']) ? sanitize_text_field($_GET['filter_source']) : 'all';
+    
+    // Build WHERE clause for filters
+    $where_conditions = array('user_id = %d');
+    $where_values = array($user_id);
+    
+    // Filter by output type
+    if ($filter_output_type !== 'all') {
+        $where_conditions[] = 'output_type = %s';
+        $where_values[] = $filter_output_type;
+    }
+    
+    // Filter by date range
+    if ($filter_date_range !== 'all') {
+        $date_condition = '';
+        switch ($filter_date_range) {
+            case 'today':
+                $date_condition = "DATE(created_at) = CURDATE()";
+                break;
+            case '7days':
+                $date_condition = "created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)";
+                break;
+            case '30days':
+                $date_condition = "created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)";
+                break;
+        }
+        if ($date_condition) {
+            $where_conditions[] = $date_condition;
+        }
+    }
+    
+    // Build WHERE clause
+    $where_clause = implode(' AND ', $where_conditions);
+    
+    // Get total count with filters
+    $total_query = "SELECT COUNT(*) FROM $table_name WHERE $where_clause";
+    $total = $wpdb->get_var(
+        $wpdb->prepare($total_query, $where_values)
+    );
+    
+    // Get paginated history with filters
+    $history_query = "SELECT * FROM $table_name WHERE $where_clause ORDER BY created_at DESC LIMIT %d OFFSET %d";
+    $history_params = array_merge($where_values, array($per_page, $offset));
     $history = $wpdb->get_results(
-        $wpdb->prepare(
-            "SELECT * FROM $table_name WHERE user_id = %d ORDER BY created_at DESC LIMIT 50",
-            $user_id
-        ),
+        $wpdb->prepare($history_query, $history_params),
         ARRAY_A
     );
     
     if ($history === false) {
         wp_send_json_error('Database error: ' . $wpdb->last_error, 500);
         return;
+    }
+    
+    // Get last cron run timestamp for comparison
+    $last_cron_run_key = 'kmwp_last_cron_run_' . $user_id;
+    $last_cron_run_data = get_option($last_cron_run_key, null);
+    $last_cron_run_timestamp = null;
+    if ($last_cron_run_data && isset($last_cron_run_data['timestamp'])) {
+        $last_cron_run_timestamp = $last_cron_run_data['timestamp'];
     }
     
     // Escape content for safe output
@@ -1046,7 +1119,24 @@ add_action('wp_ajax_kmwp_get_history', function () {
     }
     unset($item);
     
-    wp_send_json_success($history);
+    $total_pages = ceil($total / $per_page);
+    
+    // For source filter, we need to check each entry against last cron run
+    // This will be done on frontend, but we provide the timestamp here
+    
+    wp_send_json_success(array(
+        'history' => $history,
+        'total' => intval($total),
+        'page' => $page,
+        'per_page' => $per_page,
+        'total_pages' => $total_pages,
+        'last_cron_run' => $last_cron_run_timestamp,
+        'filters' => array(
+            'output_type' => $filter_output_type,
+            'date_range' => $filter_date_range,
+            'source' => $filter_source
+        )
+    ));
 });
 
 /* get_history_item */
@@ -1498,6 +1588,8 @@ function kmwp_cron_save_files($output_type, $website_url, $summarized_content = 
         if (!empty($summarized_content)) {
             $file_path_summary = ABSPATH . 'llm.txt';
             
+            // BACKUP CREATION DISABLED - Code kept for future use
+            /*
             // Create backup if file existed
             if ($file_existed_before['llm.txt'] && !in_array($file_path_summary, $files_backed_up)) {
                 $backup = kmwp_create_backup_once($file_path_summary);
@@ -1508,6 +1600,7 @@ function kmwp_cron_save_files($output_type, $website_url, $summarized_content = 
                     kmwp_log('Backup created for llm.txt', 'info', array('backup' => $backup));
                 }
             }
+            */
             
             $result_summary = @file_put_contents($file_path_summary, $summarized_content);
             if ($result_summary !== false) {
@@ -1527,6 +1620,8 @@ function kmwp_cron_save_files($output_type, $website_url, $summarized_content = 
         if (!empty($full_content)) {
             $file_path_full = ABSPATH . 'llm-full.txt';
             
+            // BACKUP CREATION DISABLED - Code kept for future use
+            /*
             // Create backup if file existed
             if ($file_existed_before['llm-full.txt'] && !in_array($file_path_full, $files_backed_up)) {
                 $backup = kmwp_create_backup_once($file_path_full);
@@ -1537,6 +1632,7 @@ function kmwp_cron_save_files($output_type, $website_url, $summarized_content = 
                     kmwp_log('Backup created for llm-full.txt', 'info', array('backup' => $backup));
                 }
             }
+            */
             
             $result_full = @file_put_contents($file_path_full, $full_content);
             if ($result_full !== false) {
@@ -1558,6 +1654,8 @@ function kmwp_cron_save_files($output_type, $website_url, $summarized_content = 
         $file_path = ABSPATH . $filename;
         
         if (!empty($content)) {
+            // BACKUP CREATION DISABLED - Code kept for future use
+            /*
             // Create backup if file existed
             if ($file_existed_before[$filename]) {
                 $backup = kmwp_create_backup_once($file_path);
@@ -1567,6 +1665,7 @@ function kmwp_cron_save_files($output_type, $website_url, $summarized_content = 
                     kmwp_log('Backup created for ' . $filename, 'info', array('backup' => $backup));
                 }
             }
+            */
             
             $result = @file_put_contents($file_path, $content);
             if ($result !== false) {
