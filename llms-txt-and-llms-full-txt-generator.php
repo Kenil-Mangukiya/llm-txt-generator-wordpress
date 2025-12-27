@@ -1471,11 +1471,17 @@ add_action('wp_ajax_kmwp_save_schedule', function () {
     }
     
     // Store schedule in wp_options (only frequency and day/date settings)
+    // Get last generation data for output_type and website_url
+    $last_generation_key = 'kmwp_last_generation_' . $user_id;
+    $last_generation = get_option($last_generation_key, array());
+    
     $schedule_data = array(
         'enabled' => $schedule_enabled,
         'frequency' => $schedule_frequency,
         'day_of_week' => $schedule_day_of_week,
         'day_of_month' => $schedule_day_of_month,
+        'output_type' => isset($last_generation['output_type']) ? $last_generation['output_type'] : 'llms_both',
+        'website_url' => isset($last_generation['website_url']) ? $last_generation['website_url'] : '',
         'updated_at' => current_time('mysql')
     );
     
@@ -2056,6 +2062,9 @@ add_action('kmwp_auto_generate_cron', function ($user_id) {
             // Mark as successful
             $success = true;
             
+            // Calculate duration
+            $duration = time() - $start_time;
+            
             // Update success log
             $log_entry = array(
                 'event' => 'cron_completed',
@@ -2064,6 +2073,7 @@ add_action('kmwp_auto_generate_cron', function ($user_id) {
                 'output_type' => $output_type,
                 'timestamp' => current_time('mysql'),
                 'status' => 'success',
+                'duration' => $duration,
                 'auto_saved' => $auto_save
             );
             update_option('kmwp_last_cron_run_' . $user_id, $log_entry);
@@ -2093,6 +2103,7 @@ add_action('kmwp_auto_generate_cron', function ($user_id) {
             
             if ($retry_count >= $max_retries) {
                 // All retries exhausted
+                $duration = time() - $start_time;
                 $log_entry = array(
                     'event' => 'cron_failed',
                     'user_id' => $user_id,
@@ -2100,6 +2111,7 @@ add_action('kmwp_auto_generate_cron', function ($user_id) {
                     'output_type' => $output_type,
                     'timestamp' => current_time('mysql'),
                     'status' => 'failed',
+                    'duration' => $duration,
                     'error' => $error_message,
                     'retries' => $retry_count
                 );
@@ -2249,7 +2261,7 @@ function kmwp_get_cron_status($user_id) {
     return array(
         'status' => $status,
         'is_paused' => (bool)$is_paused,
-        'next_run' => $next_timestamp ? date('Y-m-d H:i:s', $next_timestamp) : null,
+        'next_run' => $next_timestamp ? wp_date('Y-m-d H:i:s', $next_timestamp) : null,
         'last_run' => isset($last_run['timestamp']) ? $last_run['timestamp'] : null,
         'last_run_status' => isset($last_run['status']) ? $last_run['status'] : null,
         'last_run_duration' => isset($last_run['duration']) ? intval($last_run['duration']) : 0,
@@ -2352,3 +2364,68 @@ function kmwp_log_cron_execution($user_id, $status = 'success', $duration = 0, $
         array('%d', '%s', '%s', '%d', '%s')
     );
 }
+/* ========================
+   DEBUG CRON STATUS HANDLER
+========================*/
+add_action('wp_ajax_kmwp_debug_cron', function() {
+    if (!is_user_logged_in()) {
+        wp_send_json_error('Not logged in');
+        return;
+    }
+    
+    $user_id = get_current_user_id();
+    
+    // Check what's stored in options
+    $schedule_opt = get_option('kmwp_schedule_' . $user_id);
+    $last_run_opt = get_option('kmwp_last_cron_run_' . $user_id);
+    $is_paused = get_option('kmwp_cron_paused_' . $user_id);
+    
+    // Get next scheduled time
+    $next_scheduled = wp_next_scheduled('kmwp_auto_generate_cron', array($user_id));
+    
+    // Get recent cron log entries
+    global $wpdb;
+    $table = $wpdb->prefix . 'kmwp_cron_log';
+    $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table'") == $table;
+    $recent_logs = array();
+    
+    if ($table_exists) {
+        $recent_logs = $wpdb->get_results($wpdb->prepare(
+            "SELECT * FROM $table WHERE user_id = %d ORDER BY timestamp DESC LIMIT 5",
+            $user_id
+        ));
+    }
+    
+    wp_send_json_success(array(
+        'debug_info' => array(
+            'user_id' => $user_id,
+            'current_server_time' => current_time('mysql'),
+            'server_timestamp' => time(),
+        ),
+        'schedule_option' => array(
+            'raw' => $schedule_opt,
+            'enabled' => isset($schedule_opt['enabled']) ? $schedule_opt['enabled'] : false,
+            'frequency' => isset($schedule_opt['frequency']) ? $schedule_opt['frequency'] : 'N/A',
+        ),
+        'last_run_option' => array(
+            'raw' => $last_run_opt,
+            'timestamp' => isset($last_run_opt['timestamp']) ? $last_run_opt['timestamp'] : null,
+            'duration' => isset($last_run_opt['duration']) ? $last_run_opt['duration'] : 0,
+        ),
+        'cron_status' => array(
+            'is_paused' => $is_paused,
+            'next_scheduled_timestamp' => $next_scheduled,
+            'next_scheduled_date' => $next_scheduled ? date('Y-m-d H:i:s', $next_scheduled) : 'Not scheduled',
+        ),
+        'cron_log_table' => array(
+            'exists' => $table_exists,
+            'table_name' => $table,
+            'recent_logs' => $recent_logs,
+            'log_count' => $table_exists ? $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $table WHERE user_id = %d", $user_id)) : 0,
+        ),
+        'all_cron_hooks' => array(
+            'kmwp_cron' => wp_get_schedules(),
+            'all_scheduled' => _get_cron_array(),
+        )
+    ));
+});

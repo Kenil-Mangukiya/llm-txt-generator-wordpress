@@ -3282,27 +3282,55 @@ document.addEventListener('DOMContentLoaded', () => {
     const tabContents = document.querySelectorAll('.tab-content[data-tab-content]');
     
     if (tabButtons.length > 0) {
+        // Initialize: Hide all tab contents first
+        tabContents.forEach(content => {
+            content.classList.remove('active');
+            content.style.display = 'none';
+        });
+        
+        // Show first tab content by default
+        if (tabContents.length > 0) {
+            tabContents[0].classList.add('active');
+            tabContents[0].style.display = 'block';
+        }
+        
+        // Add mark first button as active by default
+        if (tabButtons.length > 0) {
+            tabButtons[0].classList.add('active');
+        }
+        
         tabButtons.forEach(btn => {
-            btn.addEventListener('click', function() {
+            btn.addEventListener('click', function(e) {
+                e.preventDefault();
                 const tabName = this.getAttribute('data-tab');
+                
+                console.log('[DEBUG TAB CLICK] Clicked tab:', tabName);
                 
                 // Remove active class from all buttons
                 tabButtons.forEach(b => b.classList.remove('active'));
                 
-                // Remove active class from all contents
-                tabContents.forEach(content => content.classList.remove('active'));
+                // Remove active class and hide all contents
+                tabContents.forEach(content => {
+                    content.classList.remove('active');
+                    content.style.display = 'none';
+                });
                 
                 // Add active class to clicked button
                 this.classList.add('active');
                 
-                // Add active class to corresponding content
+                // Add active class and show corresponding content
                 const activeContent = document.querySelector(`.tab-content[data-tab-content="${tabName}"]`);
                 if (activeContent) {
+                    console.log('[DEBUG TAB CLICK] Found content element for tab:', tabName);
                     activeContent.classList.add('active');
+                    activeContent.style.display = 'block';
+                } else {
+                    console.warn('[DEBUG TAB CLICK] Content element not found for tab:', tabName);
                 }
                 
                 // Load content if it's the history tab
                 if (tabName === 'file-history') {
+                    console.log('[DEBUG TAB CLICK] Loading file history');
                     // Load history with default filters
                     currentFilters = {
                         output_type: 'all',
@@ -3526,12 +3554,13 @@ document.addEventListener('DOMContentLoaded', () => {
         formatDateTime(dateString) {
             if (!dateString) return '—';
             const date = new Date(dateString);
-            return date.toLocaleString('en-US', {
+            return date.toLocaleString('en-IN', {
                 year: 'numeric',
                 month: 'short',
                 day: 'numeric',
                 hour: '2-digit',
-                minute: '2-digit'
+                minute: '2-digit',
+                hour12: true
             });
         }
 

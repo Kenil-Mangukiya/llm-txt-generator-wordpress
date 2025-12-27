@@ -42,8 +42,23 @@
                 </div>
             </div>
             <div class="input-row">
-                <button id="generateBtn" class="btn generate">Generate Files</button>
+                <button id="generateBtn" class="btn generate">Generate Latest Files</button>
             </div>
+            
+            <!-- Success Card (appears right after Generate button) -->
+            <section class="generator-card" id="successCard" style="display: none;">
+                <div class="success-card-content">
+                    <div class="success-icon">✓</div>
+                    <div class="success-info">
+                        <h3>Files Generated Successfully!</h3>
+                        <div id="successFileStats"></div>
+                    </div>
+                    <div class="success-actions">
+                        <button id="viewOutputBtn" class="btn view-output">View Output</button>
+                        <button id="saveToRootBtn" class="btn save-root">Save to Website Root</button>
+                    </div>
+                </div>
+            </section>
             
             <!-- Tab Navigation -->
             <div class="tab-navigation">
@@ -200,20 +215,6 @@
                 </div>
             </div>
         </section>
-        <!-- Success Card (Compact) -->
-        <section class="generator-card" id="successCard" style="display: none;">
-            <div class="success-card-content">
-                <div class="success-icon">✓</div>
-                <div class="success-info">
-                    <h3>Files Generated Successfully!</h3>
-                    <div id="successFileStats"></div>
-                </div>
-                <div class="success-actions">
-                    <button id="viewOutputBtn" class="btn view-output">View Output</button>
-                    <button id="saveToRootBtn" class="btn save-root">Save to Website Root</button>
-                </div>
-            </div>
-        </section>
         <!-- Output Preview Modal -->
         <div role="dialog" aria-modal="true" class="fade custom-modal modal" id="outputPreviewModal" style="display: none;" tabindex="-1">
             <div class="modal-dialog modal-dialog-centered output-preview-modal">
@@ -231,13 +232,13 @@
                         <!-- LLM Txt content -->
                         <div id="tab-content-llms_txt" class="tab-content active">
                             <div class="iframe-container">
-                                <iframe id="outputIframe" src="about:blank"></iframe>
+                                <iframe id="outputIframe" src="about:blank" scrolling="yes"></iframe>
                             </div>
                         </div>
                         <!-- LLM Full Txt content -->
                         <div id="tab-content-llms_full_txt" class="tab-content" style="display: none;">
                             <div class="iframe-container">
-                                <iframe id="outputIframeFullTxt" src="about:blank"></iframe>
+                                <iframe id="outputIframeFullTxt" src="about:blank" scrolling="yes"></iframe>
                             </div>
                         </div>
                     </div>
